@@ -1,0 +1,10 @@
+# List of Python packages to build wheels for
+# Add one package per line
+# Format: package-name==version or just package-name
+# Example:
+# numpy==1.24.0
+# pandas
+
+# Add your packages below (uncomment to use):
+# requests
+# pyyaml
