@@ -11,37 +11,80 @@ on:
       - published
 
 jobs:
+  read_packages:
+    name: Read package list
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      packages: ${{ steps.set-packages.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Read packages from file
+        id: set-packages
+        run: |
+          # Read non-empty, non-comment lines from packages.txt
+          packages=$(grep -v '^#' packages.txt | grep -v '^[[:space:]]*$' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "packages=$packages" >> $GITHUB_OUTPUT
+          echo "Packages to build: $packages"
+
   build_wheels:
-    name: Build wheels for ${{ matrix.os }}
+    name: Build ${{ matrix.package }} for ${{ matrix.os }}
+    needs: read_packages
     runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: read
     strategy:
+      fail-fast: false
       matrix:
+        package: ${{ fromJson(needs.read_packages.outputs.packages) }}
+        os: [android-arm64_v8a, android-x86_64, ios]
         include:
-          - os: android-arm
-            # GitHub Actions doesn’t currently support the Android emulator on any ARM
-            # runner. So we build on a non-ARM runner, which will skip the tests.
+          - os: android-arm64_v8a
             runs-on: ubuntu-latest
             platform: android
             archs: arm64_v8a
+          - os: android-x86_64
+            runs-on: ubuntu-latest
+            platform: android
+            archs: x86_64
           - os: ios
             runs-on: macos-latest
             platform: ios
+            archs: auto
 
     steps:
       - uses: actions/checkout@v5
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Download package source
+        run: |
+          python -m pip install --upgrade pip
+          pip download --no-binary :all: --no-deps "${{ matrix.package }}"
+          # Extract the downloaded package
+          for file in *.tar.gz; do [ -f "$file" ] && tar -xzf "$file" && rm "$file"; done
+          for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
+          for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
+          # Find the extracted directory
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" | tail -n 1)
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> $GITHUB_ENV
+          echo "Building package in: $PACKAGE_DIR"
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          CIBW_PLATFORM: ${{ matrix.platform || 'auto' }}
-          CIBW_ARCHS: ${{ matrix.archs || 'auto' }}
-        # Can also be configured directly, using `with:`
-        # with:
-        #   package-dir: .
-        #   output-dir: wheelhouse
-        #   config-file: "{package}/pyproject.toml"
+          CIBW_PLATFORM: ${{ matrix.platform }}
+          CIBW_ARCHS: ${{ matrix.archs }}
+          CIBW_BUILD: cp314-*
+        with:
+          package-dir: ${{ env.PACKAGE_DIR }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.package }}
           path: ./wheelhouse/*.whl
