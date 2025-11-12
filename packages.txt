@@ -7,4 +7,4 @@
 
 # Add your packages below (uncomment to use):
 # requests
-# pyyaml
+pyyaml
