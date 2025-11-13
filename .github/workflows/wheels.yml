@@ -223,7 +223,7 @@ jobs:
 
   deploy_index:
     name: Deploy wheel index to GitHub Pages
-    needs: build_wheels
+    needs: [read_packages, build_wheels]
     runs-on: ubuntu-latest
     # Deploy even if some builds fail (but not if cancelled)
     # This allows successful wheels to be published immediately
@@ -244,6 +244,9 @@ jobs:
         with:
           python-version: '3.x'
       
+      - name: Install PyYAML
+        run: pip install pyyaml
+      
       - name: Download all wheel artifacts
         uses: actions/download-artifact@v4
         with:
@@ -258,8 +261,11 @@ jobs:
           ls -lh wheels/
       
       - name: Generate PyPI index
+        env:
+          PACKAGES_JSON: ${{ needs.read_packages.outputs.packages }}
         run: |
-          python generate_index.py wheels public
+          echo "$PACKAGES_JSON" > packages_metadata.json
+          python generate_index.py wheels public packages_metadata.json
           
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
