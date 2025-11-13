@@ -96,7 +96,7 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     
     # Explicitly set sysroot to avoid using host system headers
     SYSROOT="$TOOLCHAIN/sysroot"
-    export CFLAGS="--sysroot=$SYSROOT"
+    export CFLAGS="--sysroot=$SYSROOT -fPIC"
     export CXXFLAGS="--sysroot=$SYSROOT"
     export LDFLAGS="--sysroot=$SYSROOT"
     
@@ -192,7 +192,7 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
     # Set compiler and flags
     export CC="$(xcrun --find clang)"
     export CXX="$(xcrun --find clang++)"
-    export CFLAGS="-arch $TARGET_ARCH -isysroot $SDK_PATH -mios-version-min=$MIN_IOS_VERSION"
+    export CFLAGS="-arch $TARGET_ARCH -isysroot $SDK_PATH -mios-version-min=$MIN_IOS_VERSION -fPIC"
     export CXXFLAGS="$CFLAGS"
     export LDFLAGS="-arch $TARGET_ARCH -isysroot $SDK_PATH"
     
