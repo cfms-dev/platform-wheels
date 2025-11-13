@@ -253,11 +253,15 @@ def topological_sort(packages_data):
     graph = {pkg['name']: [] for pkg in packages_data}
     in_degree = {pkg['name']: 0 for pkg in packages_data}
     
+    # Track which packages are depended upon by others
+    is_dependency_of_others = set()
+    
     for pkg in packages_data:
         for dep in pkg.get('build_dependencies', []):
             if dep in pkg_map:
                 graph[dep].append(pkg['name'])
                 in_degree[pkg['name']] += 1
+                is_dependency_of_others.add(dep)  # Mark this package as a dependency
             else:
                 print(f"Warning: Package {pkg['name']} depends on {dep} which is not in the package list", file=sys.stderr)
     
@@ -286,6 +290,8 @@ def topological_sort(packages_data):
     levels = calculate_dependency_levels(sorted_packages)
     for pkg in sorted_packages:
         pkg['dependency_level'] = levels[pkg['name']]
+        # Mark if this package is a dependency of others
+        pkg['is_dependency'] = pkg['name'] in is_dependency_of_others
     
     return sorted_packages
 
