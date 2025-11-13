@@ -47,6 +47,10 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      # Add the following for Android only:
+      CIBW_BUILD_FRONTEND: |
+        ${{ (matrix.platform == 'android') && 'build' || '' }}
     strategy:
       fail-fast: false
       matrix:
