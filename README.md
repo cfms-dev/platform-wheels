@@ -7,10 +7,14 @@ This repository provides an automated system for building Python wheels for mult
 - Automated wheel building for Android and iOS platforms
 - **Python 3.14 support** (officially released October 7th, 2025)
 - Android builds for **arm64_v8a** and **x86_64** architectures (as specified)
-- Easy package configuration via `packages.txt`
+- Easy package configuration via `packages.txt` or advanced `packages.yaml`
+- **Host dependency management** - Install system libraries needed by packages (e.g., libffi for cffi)
+- **Custom source support** - Build from custom URLs or Git repositories
+- **Patch support** - Apply patches to source code before building (e.g., mobile platform fixes)
 - Dynamic package list reading from configuration file
 - Separate wheels for each package and platform combination
 - **Automatic deployment to GitHub Pages as a PyPI-like index**
+
 
 ## Usage
 
@@ -44,6 +48,10 @@ requests
 
 ### Adding Packages
 
+You can configure packages in two ways:
+
+#### Simple Configuration (packages.txt)
+
 Edit the `packages.txt` file to specify which Python packages to build. Add one package per line:
 
 ```
@@ -61,6 +69,58 @@ You can specify:
 Lines starting with `#` are treated as comments and ignored. Empty lines are also ignored.
 
 See `packages.txt.example` for more examples.
+
+#### Advanced Configuration (packages.yaml)
+
+For advanced features like host dependencies and custom sources, create a `packages.yaml` file:
+
+```yaml
+packages:
+  # Simple package
+  - name: requests
+
+  # Package with version constraint
+  - name: numpy
+    version: "==1.24.0"
+
+  # Package with host dependencies (e.g., cffi needs libffi)
+  - name: cffi
+    host_dependencies:
+      - libffi-dev
+    patches:
+      - https://github.com/flet-dev/mobile-forge/raw/python3.12/recipes/cffi/patches/mobile.patch
+
+  # Package with multiple host dependencies
+  - name: cryptography
+    host_dependencies:
+      - libssl-dev
+      - libffi-dev
+      - cargo
+      - rustc
+
+  # Package from custom URL
+  - name: custom-package
+    source: url
+    url: https://example.com/package.tar.gz
+
+  # Package from Git repository
+  - name: git-package
+    source: git
+    url: https://github.com/user/repo.git
+```
+
+**Supported options:**
+- `name`: Package name (required)
+- `version`: Version constraint (optional, e.g., `"==1.0.0"`, `">=2.0.0"`)
+- `source`: Source type (optional: `pypi`, `url`, `git`; default: `pypi`)
+- `url`: Custom URL for `url` or `git` sources (required if source is not `pypi`)
+- `host_dependencies`: System packages to install before building (optional)
+- `pip_dependencies`: Python packages needed for building (optional)
+- `patches`: List of patch file URLs to apply to the source code (optional)
+
+**Note:** If `packages.yaml` exists, it will be used. Otherwise, the system falls back to `packages.txt` for backward compatibility.
+
+See `packages.yaml.example` for more examples.
 
 ### Triggering Builds
 
@@ -119,7 +179,9 @@ The index will be available at: `https://<username>.github.io/<repository>/`
 1. The `read_packages` job reads the `packages.txt` file and parses the package list
 2. The `build_wheels` job creates a matrix of all packages × platforms
 3. For each combination:
-   - Downloads the package source distribution
+   - Installs required host dependencies (system libraries) if specified
+   - Installs required pip dependencies if specified
+   - Downloads the package source distribution (from PyPI, custom URL, or Git)
    - Extracts it
    - Uses cibuildwheel to build the wheel for the target platform
    - Uploads the built wheel as an artifact
@@ -137,6 +199,6 @@ The generated index follows the simple repository API format used by pip:
 
 ## Requirements
 
-- Packages must be available on PyPI or be installable via pip
+- Packages must be available on PyPI, accessible via URL, or in a Git repository
 - Packages must have proper `setup.py` or `pyproject.toml` for building
-- Some packages may require additional build dependencies (configure in workflow if needed)
+- Host dependencies (system libraries) can be specified in `packages.yaml` if needed

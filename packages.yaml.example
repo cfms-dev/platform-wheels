@@ -1,0 +1,78 @@
+# Example packages.yaml configuration
+# This file demonstrates various ways to specify packages with advanced options
+
+packages:
+  # Simple package from PyPI (latest version)
+  - name: requests
+
+  # Package with specific version
+  - name: numpy
+    version: "==1.24.0"
+
+  # Package with version constraint
+  - name: pandas
+    version: ">=2.0.0"
+
+  # Package with host dependencies (libraries needed on the build system)
+  - name: cffi
+    host_dependencies:
+      - libffi-dev
+    patches:
+      - https://github.com/flet-dev/mobile-forge/raw/python3.12/recipes/cffi/patches/mobile.patch
+
+  # Package with multiple host dependencies
+  - name: cryptography
+    host_dependencies:
+      - libssl-dev
+      - libffi-dev
+      - cargo
+      - rustc
+
+  # Package with host dependencies for image processing
+  - name: pillow
+    host_dependencies:
+      - libjpeg-dev
+      - libpng-dev
+      - libtiff-dev
+      - libfreetype6-dev
+      - liblcms2-dev
+      - libwebp-dev
+
+  # Package with pip dependencies (Python packages needed for building)
+  - name: some-package
+    pip_dependencies:
+      - setuptools>=40
+      - wheel
+      - cython
+    patches:
+      - https://example.com/fix-build.patch
+      - https://example.com/mobile-support.patch
+
+  # Package from custom URL (tarball)
+  - name: custom-package
+    source: url
+    url: https://example.com/custom-package-1.0.0.tar.gz
+
+  # Package from Git repository
+  - name: git-package
+    source: git
+    url: https://github.com/user/repo.git
+
+  # Package from Git with specific branch/tag
+  - name: git-package-branch
+    source: git
+    url: https://github.com/user/repo.git@v1.0.0
+
+  # Complex example with all options
+  - name: complex-package
+    version: ">=1.0.0,<2.0.0"
+    source: pypi
+    host_dependencies:
+      - libffi-dev
+      - libssl-dev
+    pip_dependencies:
+      - setuptools
+      - wheel
+
+# Note: For backward compatibility, you can still use packages.txt
+# The system will automatically detect which format you're using

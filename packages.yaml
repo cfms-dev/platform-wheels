@@ -1,0 +1,73 @@
+# Platform Wheels Package Configuration
+# This file allows advanced configuration for building Python wheels
+#
+# Format:
+# packages:
+#   - name: package-name
+#     version: "==1.0.0"  # Optional: version constraint
+#     source: "pypi"  # Optional: "pypi" (default), "url", "git"
+#     url: "https://..."  # Required if source is "url" or "git"
+#     host_dependencies:  # Optional: packages needed on the host system
+#       - libffi-dev
+#       - libssl-dev
+#     pip_dependencies:  # Optional: Python packages needed to build
+#       - setuptools
+#       - wheel
+#     patches:  # Optional: list of patch files to apply
+#       - https://example.com/patch1.patch
+#       - https://example.com/patch2.patch
+
+packages:
+  # Simple package from PyPI
+  - name: pyyaml
+
+  # Package with host dependencies and patches
+  - name: cffi
+    host_dependencies:
+      - libffi-dev
+    patches:
+      - https://github.com/flet-dev/mobile-forge/raw/python3.12/recipes/cffi/patches/mobile.patch
+
+  # Package with version constraint
+  - name: websockets
+    version: ">=11.0"
+
+  # Package from PyPI with host dependencies
+  - name: numpy
+
+  - name: pycryptodome
+
+  # Package with multiple host dependencies
+  - name: cryptography
+    host_dependencies:
+      - libssl-dev
+      - libffi-dev
+      - cargo
+      - rustc
+
+  - name: pandas
+
+  # Package with host dependencies
+  - name: pillow
+    host_dependencies:
+      - libjpeg-dev
+      - libpng-dev
+      - libtiff-dev
+      - libfreetype6-dev
+      - liblcms2-dev
+      - libwebp-dev
+
+  # Packages from custom sources (flet libraries)
+  - name: flet-libcpp-shared
+
+  - name: flet-libpng
+
+  - name: flet-libjpeg
+
+  - name: flet-libxml2
+
+  - name: flet-libxslt
+
+  - name: flet-libcrc32c
+
+  - name: flet-libsodium
