@@ -117,14 +117,21 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     ls -la "$PREFIX/include" || true
     ls -la "$PREFIX/lib" || true
     
-    # Export environment variables for cffi to find libffi
-    # These will be available to the build process
+    # Export environment variables to a file for cibuildwheel
+    ENV_FILE="/tmp/libffi_env.sh"
+    echo "export FFI_INCLUDE_DIR='$PREFIX/include'" > "$ENV_FILE"
+    echo "export FFI_LIB_DIR='$PREFIX/lib'" >> "$ENV_FILE"
+    echo "export CFLAGS=\"\${CFLAGS} -I$PREFIX/include\"" >> "$ENV_FILE"
+    echo "export LDFLAGS=\"\${LDFLAGS} -L$PREFIX/lib\"" >> "$ENV_FILE"
+    
+    # Also export for immediate use
     export FFI_INCLUDE_DIR="$PREFIX/include"
     export FFI_LIB_DIR="$PREFIX/lib"
     
-    echo "Environment variables set:"
+    echo "Environment variables set and saved to $ENV_FILE:"
     echo "  FFI_INCLUDE_DIR=$FFI_INCLUDE_DIR"
     echo "  FFI_LIB_DIR=$FFI_LIB_DIR"
+    cat "$ENV_FILE"
     
     echo "libffi build complete for Android $ANDROID_ABI"
     
@@ -210,13 +217,21 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
     ls -la "$PREFIX/include" || true
     ls -la "$PREFIX/lib" || true
     
-    # Export environment variables
+    # Export environment variables to a file for cibuildwheel
+    ENV_FILE="/tmp/libffi_env.sh"
+    echo "export FFI_INCLUDE_DIR='$PREFIX/include'" > "$ENV_FILE"
+    echo "export FFI_LIB_DIR='$PREFIX/lib'" >> "$ENV_FILE"
+    echo "export CFLAGS=\"\${CFLAGS} -I$PREFIX/include\"" >> "$ENV_FILE"
+    echo "export LDFLAGS=\"\${LDFLAGS} -L$PREFIX/lib\"" >> "$ENV_FILE"
+    
+    # Also export for immediate use
     export FFI_INCLUDE_DIR="$PREFIX/include"
     export FFI_LIB_DIR="$PREFIX/lib"
     
-    echo "Environment variables set:"
+    echo "Environment variables set and saved to $ENV_FILE:"
     echo "  FFI_INCLUDE_DIR=$FFI_INCLUDE_DIR"
     echo "  FFI_LIB_DIR=$FFI_LIB_DIR"
+    cat "$ENV_FILE"
     
     echo "libffi build complete for iOS $SDK ($ARCH)"
 else

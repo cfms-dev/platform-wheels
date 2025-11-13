@@ -208,6 +208,42 @@ def read_txt_config(config_file):
     return packages_data
 
 
+def calculate_dependency_levels(packages_data):
+    """Calculate dependency level for each package (0 = no deps, 1 = depends on level 0, etc.)."""
+    pkg_map = {pkg['name']: pkg for pkg in packages_data}
+    levels = {}
+    
+    # Build reverse dependency graph (package -> packages it depends on)
+    dependencies = {pkg['name']: pkg.get('build_dependencies', []) for pkg in packages_data}
+    
+    # Calculate levels iteratively
+    remaining = set(pkg['name'] for pkg in packages_data)
+    current_level = 0
+    
+    while remaining:
+        # Find packages whose dependencies are all satisfied
+        level_packages = []
+        for pkg_name in remaining:
+            deps = dependencies[pkg_name]
+            # Check if all dependencies are already assigned a level
+            if all(dep in levels or dep not in pkg_map for dep in deps):
+                level_packages.append(pkg_name)
+        
+        if not level_packages:
+            # Circular dependency or missing dependency
+            print(f"Error: Could not resolve dependencies for remaining packages: {', '.join(remaining)}", file=sys.stderr)
+            sys.exit(1)
+        
+        # Assign current level to these packages
+        for pkg_name in level_packages:
+            levels[pkg_name] = current_level
+            remaining.remove(pkg_name)
+        
+        current_level += 1
+    
+    return levels
+
+
 def topological_sort(packages_data):
     """Sort packages based on build_dependencies using topological sort."""
     # Build a mapping from package names to package data
@@ -217,11 +253,15 @@ def topological_sort(packages_data):
     graph = {pkg['name']: [] for pkg in packages_data}
     in_degree = {pkg['name']: 0 for pkg in packages_data}
     
+    # Track which packages are depended upon by others
+    is_dependency_of_others = set()
+    
     for pkg in packages_data:
         for dep in pkg.get('build_dependencies', []):
             if dep in pkg_map:
                 graph[dep].append(pkg['name'])
                 in_degree[pkg['name']] += 1
+                is_dependency_of_others.add(dep)  # Mark this package as a dependency
             else:
                 print(f"Warning: Package {pkg['name']} depends on {dep} which is not in the package list", file=sys.stderr)
     
@@ -245,6 +285,13 @@ def topological_sort(packages_data):
         remaining = [name for name, degree in in_degree.items() if degree > 0]
         print(f"Error: Circular dependency detected among packages: {', '.join(remaining)}", file=sys.stderr)
         sys.exit(1)
+    
+    # Calculate and add dependency levels
+    levels = calculate_dependency_levels(sorted_packages)
+    for pkg in sorted_packages:
+        pkg['dependency_level'] = levels[pkg['name']]
+        # Mark if this package is a dependency of others
+        pkg['is_dependency'] = pkg['name'] in is_dependency_of_others
     
     return sorted_packages
 
@@ -292,16 +339,23 @@ def main():
     
     # Also output summary to stderr for logging
     print(f"\nFound {len(packages_data)} packages:", file=sys.stderr)
-    for pkg in packages_data:
-        info_parts = []
-        if pkg['host_dependencies']:
-            info_parts.append(f"host deps: {', '.join(pkg['host_dependencies'])}")
-        if pkg.get('build_dependencies'):
-            info_parts.append(f"build deps: {', '.join(pkg['build_dependencies'])}")
-        if pkg['patches']:
-            info_parts.append(f"patches: {len(pkg['patches'])}")
-        info = f" ({'; '.join(info_parts)})" if info_parts else ""
-        print(f"  - {pkg['spec']}{info}", file=sys.stderr)
+    
+    # Group by dependency level
+    max_level = max(pkg.get('dependency_level', 0) for pkg in packages_data)
+    for level in range(max_level + 1):
+        level_packages = [pkg for pkg in packages_data if pkg.get('dependency_level', 0) == level]
+        if level_packages:
+            print(f"\n  Level {level} ({len(level_packages)} packages):", file=sys.stderr)
+            for pkg in level_packages:
+                info_parts = []
+                if pkg['host_dependencies']:
+                    info_parts.append(f"host deps: {', '.join(pkg['host_dependencies'])}")
+                if pkg.get('build_dependencies'):
+                    info_parts.append(f"build deps: {', '.join(pkg['build_dependencies'])}")
+                if pkg['patches']:
+                    info_parts.append(f"patches: {len(pkg['patches'])}")
+                info = f" ({'; '.join(info_parts)})" if info_parts else ""
+                print(f"    - {pkg['spec']}{info}", file=sys.stderr)
 
 
 if __name__ == '__main__':

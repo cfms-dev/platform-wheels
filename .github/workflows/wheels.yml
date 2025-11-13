@@ -18,6 +18,9 @@ jobs:
       contents: read
     outputs:
       packages: ${{ steps.set-packages.outputs.packages }}
+      dependency-packages: ${{ steps.set-packages.outputs.dependency-packages }}
+      dependent-packages: ${{ steps.set-packages.outputs.dependent-packages }}
+      independent-packages: ${{ steps.set-packages.outputs.independent-packages }}
     steps:
       - uses: actions/checkout@v5
       
@@ -32,28 +35,44 @@ jobs:
       - name: Read packages from configuration
         id: set-packages
         run: |
-          # Use new read_packages.py script that supports both YAML and txt formats
           packages=$(python read_packages.py)
-          echo "packages=$packages" >> "$GITHUB_OUTPUT"
-          echo "Packages to build:"
-          echo "$packages" | jq -r '.[] | "  - \(.spec) [\(.source)]"'
+          
+          # Auto-detect package groups based on their characteristics:
+          # 1. dependency-packages: packages that other packages depend on (is_dependency: true)
+          # 2. dependent-packages: packages that have dependencies (build_dependencies: [...])
+          # 3. independent-packages: packages with no dependencies and not depended upon
+          
+          dependency_packages=$(echo "$packages" | jq -c '[.[] | select(.is_dependency == true)]')
+          dependent_packages=$(echo "$packages" | jq -c '[.[] | select((.build_dependencies | length) > 0)]')
+          independent_packages=$(echo "$packages" | jq -c '[.[] | select(.is_dependency == false and ((.build_dependencies | length) == 0))]')
+          
+          {
+            echo "packages=$packages"
+            echo "dependency-packages=$dependency_packages"
+            echo "dependent-packages=$dependent_packages"
+            echo "independent-packages=$independent_packages"
+          } >> "$GITHUB_OUTPUT"
+          
+          echo "Package groups (auto-detected):"
+          echo "  Dependency packages (others depend on these): $(echo "$dependency_packages" | jq -r '[.[].name] | join(", ")')"
+          echo "  Dependent packages (depend on others): $(echo "$dependent_packages" | jq -r '[.[].name] | join(", ")')"
+          echo "  Independent packages (no dependencies): $(echo "$independent_packages" | jq -r '[.[].name] | join(", ")')"
 
-  build_wheels:
+  # Build packages that other packages depend on (e.g., numpy)
+  build_dependency_packages:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
     needs: read_packages
+    if: fromJson(needs.read_packages.outputs.dependency-packages)[0] != null
     runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
     defaults:
       run:
         shell: bash
-    # env:
-    #   # Add the following for Android only:
-    #   CIBW_BUILD_FRONTEND: ${{ matrix.platform == 'android' && 'build' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.read_packages.outputs.packages) }}
+        package: ${{ fromJson(needs.read_packages.outputs.dependency-packages) }}
         os: [android-arm64_v8a, android-x86_64, ios]
         include:
           - os: android-arm64_v8a
@@ -68,7 +87,233 @@ jobs:
             runs-on: macos-latest
             platform: ios
             archs: all
+    steps:
+      # Copy all steps from build_level_0 template
+      - name: Check if platform should be skipped
+        id: check-skip
+        run: |
+          # Check if this platform is in the skip_platforms list
+          skip_platforms='${{ toJSON(matrix.package.skip_platforms) }}'
+          current_platform='${{ matrix.platform }}'
+          
+          if echo "$skip_platforms" | jq -e --arg platform "$current_platform" 'index($platform)' > /dev/null; then
+            echo "Skipping build for $current_platform (in skip_platforms list)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building for $current_platform"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      
+      - uses: actions/checkout@v5
+        if: steps.check-skip.outputs.skip != 'true'
 
+      - name: Set up Python
+        if: steps.check-skip.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install host dependencies (Ubuntu)
+        if: steps.check-skip.outputs.skip != 'true' && runner.os == 'Linux' && matrix.package.host_dependencies[0] != null
+        run: |
+          echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
+          sudo apt-get update
+          sudo apt-get install -y ${{ join(matrix.package.host_dependencies, ' ') }}
+
+      - name: Install host dependencies (macOS)
+        if: steps.check-skip.outputs.skip != 'true' && runner.os == 'macOS' && matrix.package.host_dependencies[0] != null
+        run: |
+          echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
+          # Map common Linux package names to macOS equivalents
+          deps="${{ join(matrix.package.host_dependencies, ' ') }}"
+          deps="${deps//libffi-dev/libffi}"
+          deps="${deps//libssl-dev/openssl}"
+          deps="${deps//libjpeg-dev/jpeg}"
+          deps="${deps//libpng-dev/libpng}"
+          deps="${deps//libtiff-dev/libtiff}"
+          deps="${deps//libfreetype6-dev/freetype}"
+          deps="${deps//liblcms2-dev/little-cms2}"
+          deps="${deps//libwebp-dev/webp}"
+          brew install "$deps" || true
+
+      - name: Install pip dependencies
+        if: steps.check-skip.outputs.skip != 'true' && matrix.package.pip_dependencies[0] != null
+        run: |
+          echo "Installing pip dependencies: ${{ join(matrix.package.pip_dependencies, ' ') }}"
+          python -m pip install ${{ join(matrix.package.pip_dependencies, ' ') }}
+
+      # Level 0 has no build dependencies, skip that step
+
+      - name: Download package source
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          # Check if custom URL is specified
+          if [ "${{ matrix.package.source }}" = "url" ] && [ -n "${{ matrix.package.url }}" ]; then
+            echo "Downloading from custom URL: ${{ matrix.package.url }}"
+            curl -L -o package_source "${{ matrix.package.url }}"
+            # Determine file type and extract
+            file package_source
+            if file package_source | grep -q "gzip"; then
+              mv package_source package.tar.gz
+              tar -xzf package.tar.gz && rm package.tar.gz
+            elif file package_source | grep -q "Zip"; then
+              mv package_source package.zip
+              unzip package.zip && rm package.zip
+            elif file package_source | grep -q "tar"; then
+              mv package_source package.tar
+              tar -xf package.tar && rm package.tar
+            else
+              echo "Unknown file type, trying as tarball"
+              mv package_source package.tar.gz
+              tar -xzf package.tar.gz && rm package.tar.gz
+            fi
+          elif [ "${{ matrix.package.source }}" = "git" ] && [ -n "${{ matrix.package.url }}" ]; then
+            echo "Cloning from git: ${{ matrix.package.url }}"
+            git clone "${{ matrix.package.url }}" package_dir
+          else
+            echo "Downloading from PyPI: ${{ matrix.package.spec }}"
+            pip download --no-binary :all: --no-deps "${{ matrix.package.spec }}"
+            # Extract the downloaded package
+            for file in *.tar.gz; do [ -f "$file" ] && tar -xzf "$file" && rm "$file"; done
+            for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
+            for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
+          fi
+          # Find the extracted directory (exclude common repo directories and scripts)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
+          
+          # Validate that PACKAGE_DIR is set and exists
+          if [ -z "$PACKAGE_DIR" ]; then
+            echo "ERROR: Could not find extracted package directory"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
+          
+          # Validate that the directory contains a Python package configuration file
+          if [ ! -f "$PACKAGE_DIR/setup.py" ] && [ ! -f "$PACKAGE_DIR/setup.cfg" ] && [ ! -f "$PACKAGE_DIR/pyproject.toml" ]; then
+            echo "ERROR: Package directory does not contain setup.py, setup.cfg, or pyproject.toml"
+            echo "Directory contents:"
+            ls -la "$PACKAGE_DIR"
+            exit 1
+          fi
+          
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> "$GITHUB_ENV"
+          echo "Building package in: $PACKAGE_DIR"
+
+      - name: Apply patches
+        if: steps.check-skip.outputs.skip != 'true' && toJSON(matrix.package.patches) != '[]'
+        run: |
+          echo "Applying patches to package in: ${{ env.PACKAGE_DIR }}"
+          cd "${{ env.PACKAGE_DIR }}"
+          # Apply each patch
+          PATCH_INDEX=0
+          PATCHES='${{ toJSON(matrix.package.patches) }}'
+          echo "$PATCHES" | jq -r '.[]' | while read -r patch_path; do
+            PATCH_INDEX=$((PATCH_INDEX + 1))
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              # Download patch from URL
+              echo "Downloading patch from URL: $patch_path"
+              curl -L -o "/tmp/patch_${PATCH_INDEX}.patch" "$patch_path"
+              PATCH_FILE="/tmp/patch_${PATCH_INDEX}.patch"
+            else
+              # Use local patch file
+              echo "Using local patch: $patch_path"
+              # Convert to absolute path from repository root
+              if [[ ! "$patch_path" =~ ^/ ]]; then
+                PATCH_FILE="${GITHUB_WORKSPACE}/$patch_path"
+              else
+                PATCH_FILE="$patch_path"
+              fi
+            fi
+            
+            echo "Applying patch ${PATCH_INDEX}..."
+            patch -p1 < "$PATCH_FILE" || {
+              echo "Failed to apply patch with -p1, trying -p0"
+              patch -p0 < "$PATCH_FILE"
+            }
+            
+            # Clean up if it was a downloaded patch
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              rm "/tmp/patch_${PATCH_INDEX}.patch"
+            fi
+          done
+          echo "All patches applied successfully"
+
+      - name: Build wheels
+        working-directory: ${{ env.PACKAGE_DIR }}
+        if: steps.check-skip.outputs.skip != 'true'
+        env:
+          CIBW_PLATFORM: ${{ matrix.platform }}
+          CIBW_ARCHS: ${{ matrix.archs }}
+          CIBW_BUILD: cp314-*
+          # Pass through environment variables needed by build scripts
+          CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE HOST_DEPENDENCIES
+          CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE HOST_DEPENDENCIES
+          # Set HOST_DEPENDENCIES for use in build scripts
+          HOST_DEPENDENCIES: ${{ join(matrix.package.host_dependencies, ' ') }}
+          # Apply package-specific cibuildwheel environment variables if specified
+          CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
+          # Override before_all if specified in recipe (empty string disables it)
+          # If host dependencies exist and before_all is set, append the env setup script
+          CIBW_BEFORE_ALL: |
+            ${{ matrix.package.cibw_before_all }}
+            if [ -n "$HOST_DEPENDENCIES" ]; then
+              echo "Setting up cross-compilation environment for host dependencies..."
+              if [ -f "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh" ]; then
+                # Run script in bash, capture environment variables, and source them in current shell
+                bash -c ". '$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh' >/dev/null 2>&1 && env" | \
+              grep -E '^(CFLAGS|CPPFLAGS|LDFLAGS|PKG_CONFIG_PATH|.*_(INCLUDE|LIB)_DIR)=' | \
+              sed 's/^/export /' | sed 's/=/="/' | sed 's/$/"/' > /tmp/build_env.sh
+                . /tmp/build_env.sh
+                rm /tmp/build_env.sh
+              fi
+            fi
+          # Override config_settings if specified in recipe
+          CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel==3.3.0
+          echo "Running cibuildwheel (platform=$CIBW_PLATFORM, archs=$CIBW_ARCHS) in $(pwd)"
+          ls -la
+          # Run cibuildwheel from the package directory; output wheels to ./wheelhouse
+          python -m cibuildwheel --output-dir wheelhouse .
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check-skip.outputs.skip != 'true'
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
+          path: ./wheelhouse/*.whl
+
+  # Build packages with no dependencies and not depended upon by others
+  build_independent_packages:
+    name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
+    needs: read_packages
+    if: fromJson(needs.read_packages.outputs.independent-packages)[0] != null
+    runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.read_packages.outputs.independent-packages) }}
+        os: [android-arm64_v8a, android-x86_64, ios]
+        include:
+          - os: android-arm64_v8a
+            runs-on: ubuntu-latest
+            platform: android
+            archs: arm64_v8a
+          - os: android-x86_64
+            runs-on: ubuntu-latest
+            platform: android
+            archs: x86_64
+          - os: ios
+            runs-on: macos-latest
+            platform: ios
+            archs: all
     steps:
       - name: Check if platform should be skipped
         id: check-skip
@@ -123,72 +368,254 @@ jobs:
           echo "Installing pip dependencies: ${{ join(matrix.package.pip_dependencies, ' ') }}"
           python -m pip install ${{ join(matrix.package.pip_dependencies, ' ') }}
 
-      - name: Wait for and install build dependencies
+      # Level 0 has no build dependencies, skip that step
+
+      - name: Download package source
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          # Check if custom URL is specified
+          if [ "${{ matrix.package.source }}" = "url" ] && [ -n "${{ matrix.package.url }}" ]; then
+            echo "Downloading from custom URL: ${{ matrix.package.url }}"
+            curl -L -o package_source "${{ matrix.package.url }}"
+            # Determine file type and extract
+            file package_source
+            if file package_source | grep -q "gzip"; then
+              mv package_source package.tar.gz
+              tar -xzf package.tar.gz && rm package.tar.gz
+            elif file package_source | grep -q "Zip"; then
+              mv package_source package.zip
+              unzip package.zip && rm package.zip
+            elif file package_source | grep -q "tar"; then
+              mv package_source package.tar
+              tar -xf package.tar && rm package.tar
+            else
+              echo "Unknown file type, trying as tarball"
+              mv package_source package.tar.gz
+              tar -xzf package.tar.gz && rm package.tar.gz
+            fi
+          elif [ "${{ matrix.package.source }}" = "git" ] && [ -n "${{ matrix.package.url }}" ]; then
+            echo "Cloning from git: ${{ matrix.package.url }}"
+            git clone "${{ matrix.package.url }}" package_dir
+          else
+            echo "Downloading from PyPI: ${{ matrix.package.spec }}"
+            pip download --no-binary :all: --no-deps "${{ matrix.package.spec }}"
+            # Extract the downloaded package
+            for file in *.tar.gz; do [ -f "$file" ] && tar -xzf "$file" && rm "$file"; done
+            for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
+            for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
+          fi
+          # Find the extracted directory (exclude common repo directories and scripts)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
+          
+          # Validate that PACKAGE_DIR is set and exists
+          if [ -z "$PACKAGE_DIR" ]; then
+            echo "ERROR: Could not find extracted package directory"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
+          
+          # Validate that the directory contains a Python package configuration file
+          if [ ! -f "$PACKAGE_DIR/setup.py" ] && [ ! -f "$PACKAGE_DIR/setup.cfg" ] && [ ! -f "$PACKAGE_DIR/pyproject.toml" ]; then
+            echo "ERROR: Package directory does not contain setup.py, setup.cfg, or pyproject.toml"
+            echo "Directory contents:"
+            ls -la "$PACKAGE_DIR"
+            exit 1
+          fi
+          
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> "$GITHUB_ENV"
+          echo "Building package in: $PACKAGE_DIR"
+
+      - name: Apply patches
+        if: steps.check-skip.outputs.skip != 'true' && toJSON(matrix.package.patches) != '[]'
+        run: |
+          echo "Applying patches to package in: ${{ env.PACKAGE_DIR }}"
+          cd "${{ env.PACKAGE_DIR }}"
+          # Apply each patch
+          PATCH_INDEX=0
+          PATCHES='${{ toJSON(matrix.package.patches) }}'
+          echo "$PATCHES" | jq -r '.[]' | while read -r patch_path; do
+            PATCH_INDEX=$((PATCH_INDEX + 1))
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              # Download patch from URL
+              echo "Downloading patch from URL: $patch_path"
+              curl -L -o "/tmp/patch_${PATCH_INDEX}.patch" "$patch_path"
+              PATCH_FILE="/tmp/patch_${PATCH_INDEX}.patch"
+            else
+              # Use local patch file
+              echo "Using local patch: $patch_path"
+              # Convert to absolute path from repository root
+              if [[ ! "$patch_path" =~ ^/ ]]; then
+                PATCH_FILE="${GITHUB_WORKSPACE}/$patch_path"
+              else
+                PATCH_FILE="$patch_path"
+              fi
+            fi
+            
+            echo "Applying patch ${PATCH_INDEX}..."
+            patch -p1 < "$PATCH_FILE" || {
+              echo "Failed to apply patch with -p1, trying -p0"
+              patch -p0 < "$PATCH_FILE"
+            }
+            
+            # Clean up if it was a downloaded patch
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              rm "/tmp/patch_${PATCH_INDEX}.patch"
+            fi
+          done
+          echo "All patches applied successfully"
+
+      - name: Build wheels
+        working-directory: ${{ env.PACKAGE_DIR }}
+        if: steps.check-skip.outputs.skip != 'true'
+        env:
+          CIBW_PLATFORM: ${{ matrix.platform }}
+          CIBW_ARCHS: ${{ matrix.archs }}
+          CIBW_BUILD: cp314-*
+          # Pass through environment variables needed by build scripts
+          CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE HOST_DEPENDENCIES
+          CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE HOST_DEPENDENCIES
+          # Set HOST_DEPENDENCIES for use in build scripts
+          HOST_DEPENDENCIES: ${{ join(matrix.package.host_dependencies, ' ') }}
+          # Apply package-specific cibuildwheel environment variables if specified
+          CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
+          # Override before_all if specified in recipe (empty string disables it)
+          # If host dependencies exist and before_all is set, append the env setup script
+          CIBW_BEFORE_ALL: |
+            ${{ matrix.package.cibw_before_all }}
+            if [ -n "$HOST_DEPENDENCIES" ]; then
+              echo "Setting up cross-compilation environment for host dependencies..."
+              if [ -f "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh" ]; then
+                # Run script in bash, capture environment variables, and source them in current shell
+                bash -c ". '$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh' >/dev/null 2>&1 && env" | \
+              grep -E '^(CFLAGS|CPPFLAGS|LDFLAGS|PKG_CONFIG_PATH|.*_(INCLUDE|LIB)_DIR)=' | \
+              sed 's/^/export /' | sed 's/=/="/' | sed 's/$/"/' > /tmp/build_env.sh
+                . /tmp/build_env.sh
+                rm /tmp/build_env.sh
+              fi
+            fi
+          # Override config_settings if specified in recipe
+          CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel==3.3.0
+          echo "Running cibuildwheel (platform=$CIBW_PLATFORM, archs=$CIBW_ARCHS) in $(pwd)"
+          ls -la
+          # Run cibuildwheel from the package directory; output wheels to ./wheelhouse
+          python -m cibuildwheel --output-dir wheelhouse .
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check-skip.outputs.skip != 'true'
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
+          path: ./wheelhouse/*.whl
+
+  # Build packages that have dependencies on other packages
+  build_dependent_packages:
+    name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
+    needs: [read_packages, build_dependency_packages]
+    if: fromJson(needs.read_packages.outputs.dependent-packages)[0] != null
+    runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJson(needs.read_packages.outputs.dependent-packages) }}
+        os: [android-arm64_v8a, android-x86_64, ios]
+        include:
+          - os: android-arm64_v8a
+            runs-on: ubuntu-latest
+            platform: android
+            archs: arm64_v8a
+          - os: android-x86_64
+            runs-on: ubuntu-latest
+            platform: android
+            archs: x86_64
+          - os: ios
+            runs-on: macos-latest
+            platform: ios
+            archs: all
+    steps:
+      - name: Check if platform should be skipped
+        id: check-skip
+        run: |
+          # Check if this platform is in the skip_platforms list
+          skip_platforms='${{ toJSON(matrix.package.skip_platforms) }}'
+          current_platform='${{ matrix.platform }}'
+          
+          if echo "$skip_platforms" | jq -e --arg platform "$current_platform" 'index($platform)' > /dev/null; then
+            echo "Skipping build for $current_platform (in skip_platforms list)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building for $current_platform"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      
+      - uses: actions/checkout@v5
+        if: steps.check-skip.outputs.skip != 'true'
+
+      - name: Set up Python
+        if: steps.check-skip.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install host dependencies (Ubuntu)
+        if: steps.check-skip.outputs.skip != 'true' && runner.os == 'Linux' && matrix.package.host_dependencies[0] != null
+        run: |
+          echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
+          sudo apt-get update
+          sudo apt-get install -y ${{ join(matrix.package.host_dependencies, ' ') }}
+
+      - name: Install host dependencies (macOS)
+        if: steps.check-skip.outputs.skip != 'true' && runner.os == 'macOS' && matrix.package.host_dependencies[0] != null
+        run: |
+          echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
+          # Map common Linux package names to macOS equivalents
+          deps="${{ join(matrix.package.host_dependencies, ' ') }}"
+          deps="${deps//libffi-dev/libffi}"
+          deps="${deps//libssl-dev/openssl}"
+          deps="${deps//libjpeg-dev/jpeg}"
+          deps="${deps//libpng-dev/libpng}"
+          deps="${deps//libtiff-dev/libtiff}"
+          deps="${deps//libfreetype6-dev/freetype}"
+          deps="${deps//liblcms2-dev/little-cms2}"
+          deps="${deps//libwebp-dev/webp}"
+          brew install "$deps" || true
+
+      - name: Install pip dependencies
+        if: steps.check-skip.outputs.skip != 'true' && matrix.package.pip_dependencies[0] != null
+        run: |
+          echo "Installing pip dependencies: ${{ join(matrix.package.pip_dependencies, ' ') }}"
+          python -m pip install ${{ join(matrix.package.pip_dependencies, ' ') }}
+
+      - name: Download and install build dependencies
+        if: steps.check-skip.outputs.skip != 'true' && matrix.package.build_dependencies[0] != null
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/build_deps
+          pattern: cibw-wheels-${{ matrix.os }}-*
+      
+      - name: Install build dependency wheels
         if: steps.check-skip.outputs.skip != 'true' && matrix.package.build_dependencies[0] != null
         run: |
-          echo "Package has build dependencies: ${{ join(matrix.package.build_dependencies, ' ') }}"
+          # Install dependency wheels
           BUILD_DEPS='${{ toJSON(matrix.package.build_dependencies) }}'
-          
-          # Parse build dependencies
           echo "$BUILD_DEPS" | jq -r '.[]' | while read -r dep_name; do
-            echo "Waiting for dependency: $dep_name (platform: ${{ matrix.os }})"
-            
-            # Wait for the artifact to be available (polling approach)
-            MAX_ATTEMPTS=60  # 60 attempts * 30 seconds = 30 minutes max wait
-            ATTEMPT=0
-            ARTIFACT_NAME="cibw-wheels-${{ matrix.os }}-${dep_name}"
-            
-            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-              echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Checking for artifact $ARTIFACT_NAME..."
-              
-              # Use GitHub API to check if artifact exists
-              ARTIFACTS_JSON=$(curl -s -H "Authorization: token ${{ github.token }}" \
-                "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts")
-              
-              # Check if our artifact exists
-              ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .id")
-              
-              if [ -n "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
-                echo "✓ Found artifact with ID: $ARTIFACT_ID"
-                
-                # Download the artifact using GitHub API
-                mkdir -p "/tmp/build_deps/${dep_name}"
-                DOWNLOAD_URL=$(echo "$ARTIFACTS_JSON" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url")
-                
-                echo "Downloading artifact from: $DOWNLOAD_URL"
-                curl -L -H "Authorization: token ${{ github.token }}" \
-                  -o "/tmp/build_deps/${dep_name}.zip" "$DOWNLOAD_URL"
-                
-                # Extract the artifact
-                unzip -q "/tmp/build_deps/${dep_name}.zip" -d "/tmp/build_deps/${dep_name}"
-                rm "/tmp/build_deps/${dep_name}.zip"
-                
-                # Install the wheel
-                if ls /tmp/build_deps/${dep_name}/*.whl 1> /dev/null 2>&1; then
-                  echo "Installing wheel(s) from $dep_name..."
-                  python -m pip install /tmp/build_deps/${dep_name}/*.whl
-                  echo "✓ Installed $dep_name successfully"
-                else
-                  echo "Warning: No wheel files found in artifact for $dep_name"
-                fi
-                break
-              else
-                if [ $ATTEMPT -eq 0 ]; then
-                  echo "Artifact not yet available, waiting for build to complete..."
-                fi
-                ATTEMPT=$((ATTEMPT + 1))
-                if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                  sleep 30
-                else
-                  echo "ERROR: Timeout waiting for dependency $dep_name"
-                  echo "The build dependency '$dep_name' did not complete in time."
-                  exit 1
-                fi
-              fi
-            done
+            ARTIFACT_DIR="/tmp/build_deps/cibw-wheels-${{ matrix.os }}-${dep_name}"
+            if [ -d "$ARTIFACT_DIR" ] && ls "$ARTIFACT_DIR"/*.whl 1> /dev/null 2>&1; then
+              echo "Installing wheel(s) from $dep_name..."
+              python -m pip install "$ARTIFACT_DIR"/*.whl
+              echo "✓ Installed $dep_name successfully"
+            else
+              echo "Warning: No wheel files found for dependency $dep_name"
+            fi
           done
-          
-          echo "All build dependencies installed successfully"
 
       - name: Download package source
         if: steps.check-skip.outputs.skip != 'true'
@@ -333,10 +760,8 @@ jobs:
 
   deploy_index:
     name: Deploy wheel index to GitHub Pages
-    needs: [read_packages, build_wheels]
+    needs: [read_packages, build_dependency_packages, build_independent_packages, build_dependent_packages]
     runs-on: ubuntu-latest
-    # Deploy even if some builds fail (but not if cancelled)
-    # This allows successful wheels to be published immediately
     if: always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'release')
     permissions:
       contents: read
@@ -366,7 +791,6 @@ jobs:
       - name: Organize wheels
         run: |
           mkdir -p wheels
-          # Move all wheels to a single directory
           find artifacts -name "*.whl" -exec cp {} wheels/ \;
           ls -lh wheels/
       
