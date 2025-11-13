@@ -1,0 +1,15 @@
+# Recipe for flet-libxml2 package
+# libxml2 library built from source for mobile platforms
+package:
+  name: flet-libxml2
+  version: "2.9.8"
+
+source: url
+url: http://xmlsoft.org/download/libxml2-2.9.8.tar.gz
+
+host_dependencies:
+  - zlib1g-dev
+
+# Apply mobile-specific patches
+patches:
+  - patches/mobile.patch

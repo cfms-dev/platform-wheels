@@ -125,8 +125,22 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
 elif [ "$CIBW_PLATFORM" = "ios" ]; then
     echo "Building libffi for iOS..."
     
-    # For iOS, libffi might be provided by the system or we need a similar approach
-    # iOS cross-compilation is more complex and may require xcframework
+    # Determine iOS SDK and architecture
+    if [ -n "${IPHONEOS_DEPLOYMENT_TARGET:-}" ]; then
+        # Building for iOS device
+        SDK="iphoneos"
+        ARCH="${CIBW_ARCHS:-arm64}"
+    else
+        # Building for iOS simulator
+        SDK="iphonesimulator"
+        if [ "$(uname -m)" = "arm64" ]; then
+            ARCH="${CIBW_ARCHS:-arm64}"
+        else
+            ARCH="${CIBW_ARCHS:-x86_64}"
+        fi
+    fi
+    
+    echo "Building for iOS SDK: $SDK, Architecture: $ARCH"
     
     # Download libffi source
     LIBFFI_VERSION="3.4.6"
@@ -141,17 +155,48 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
     
     cd "$LIBFFI_DIR"
     
-    # Set install prefix
-    PREFIX="/tmp/libffi-install-ios"
+    # Set install prefix based on architecture
+    PREFIX="/tmp/libffi-install-ios-${ARCH}"
     
-    # For iOS, we need to build for the simulator or device
-    # This is a simplified version - full iOS support would need more work
+    # Get SDK path
+    SDK_PATH=$(xcrun --sdk $SDK --show-sdk-path)
+    
+    # Set up compiler flags for iOS
+    if [ "$SDK" = "iphoneos" ]; then
+        # iOS device
+        export CC="$(xcrun --sdk $SDK --find clang)"
+        export CXX="$(xcrun --sdk $SDK --find clang++)"
+        export CFLAGS="-arch $ARCH -isysroot $SDK_PATH -mios-version-min=12.0"
+        export CXXFLAGS="$CFLAGS"
+        export LDFLAGS="-arch $ARCH -isysroot $SDK_PATH"
+        HOST_FLAG="--host=aarch64-apple-darwin"
+    else
+        # iOS simulator
+        export CC="$(xcrun --sdk $SDK --find clang)"
+        export CXX="$(xcrun --sdk $SDK --find clang++)"
+        export CFLAGS="-arch $ARCH -isysroot $SDK_PATH -mios-simulator-version-min=12.0"
+        export CXXFLAGS="$CFLAGS"
+        export LDFLAGS="-arch $ARCH -isysroot $SDK_PATH"
+        if [ "$ARCH" = "arm64" ]; then
+            HOST_FLAG="--host=aarch64-apple-darwin"
+        else
+            HOST_FLAG="--host=x86_64-apple-darwin"
+        fi
+    fi
+    
+    # Clean previous builds
+    make clean || true
+    
+    # Configure for iOS
     ./configure \
+        $HOST_FLAG \
         --prefix="$PREFIX" \
         --enable-static \
-        --disable-shared
+        --disable-shared \
+        --disable-dependency-tracking
     
-    make -j$(sysctl -n hw.ncpu)
+    # Build and install
+    make -j$(sysctl -n hw.ncpu || echo 4)
     make install
     
     echo "libffi built and installed to: $PREFIX"
@@ -166,7 +211,7 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
     echo "  FFI_INCLUDE_DIR=$FFI_INCLUDE_DIR"
     echo "  FFI_LIB_DIR=$FFI_LIB_DIR"
     
-    echo "libffi build complete for iOS"
+    echo "libffi build complete for iOS $SDK ($ARCH)"
 else
     echo "Platform $CIBW_PLATFORM not supported for libffi cross-build"
     exit 1
