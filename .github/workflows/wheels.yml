@@ -88,3 +88,51 @@ jobs:
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.package }}
           path: ./wheelhouse/*.whl
+
+  deploy_index:
+    name: Deploy wheel index to GitHub Pages
+    needs: build_wheels
+    runs-on: ubuntu-latest
+    # Only deploy on push to main or release
+    if: github.event_name == 'push' || github.event_name == 'release'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: cibw-wheels-*
+      
+      - name: Organize wheels
+        run: |
+          mkdir -p wheels
+          # Move all wheels to a single directory
+          find artifacts -name "*.whl" -exec cp {} wheels/ \;
+          ls -lh wheels/
+      
+      - name: Generate PyPI index
+        run: |
+          python generate_index.py wheels public
+          
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
