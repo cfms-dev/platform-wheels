@@ -27,6 +27,10 @@ def test_get_package_name_from_wheel():
         ("NumPy-1.24.0-cp314-cp314-ios_arm64.whl", "NumPy"),
         ("Some_Package-1.0-cp314-cp314-android.whl", "Some-Package"),
         ("some_package-1.0-cp314-cp314-android.whl", "some-package"),
+        # Test hyphenated package names
+        ("my-package-1.0.0-cp314-cp314-android.whl", "my-package"),
+        ("some-hyphenated-name-2.1.0-cp314-cp314-android.whl", "some-hyphenated-name"),
+        ("My-Hyphenated-Package-1.5.0-cp314-cp314-ios.whl", "My-Hyphenated-Package"),
     ]
     
     all_passed = True
