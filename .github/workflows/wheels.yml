@@ -305,7 +305,12 @@ jobs:
             if [ -n "$HOST_DEPENDENCIES" ]; then
               echo "Setting up cross-compilation environment for host dependencies..."
               if [ -f "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh" ]; then
-                . "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh"
+                # Run script in bash, capture environment variables, and source them in current shell
+                bash -c ". '$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh' >/dev/null 2>&1 && env" | \
+                  grep -E '^(CFLAGS|CPPFLAGS|LDFLAGS|PKG_CONFIG_PATH|.*_(INCLUDE|LIB)_DIR)=' | \
+                  sed 's/^/export /' > /tmp/build_env.sh
+                . /tmp/build_env.sh
+                rm /tmp/build_env.sh
               fi
             fi
           # Override config_settings if specified in recipe
