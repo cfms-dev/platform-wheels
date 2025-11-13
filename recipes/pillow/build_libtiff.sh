@@ -90,7 +90,12 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     export AR="$TOOLCHAIN/bin/llvm-ar"
     export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
     export STRIP="$TOOLCHAIN/bin/llvm-strip"
-    export CFLAGS="-fPIC"
+    
+    # Explicitly set sysroot to avoid using host system headers
+    SYSROOT="$TOOLCHAIN/sysroot"
+    export CFLAGS="--sysroot=$SYSROOT -fPIC"
+    export CXXFLAGS="--sysroot=$SYSROOT"
+    export LDFLAGS="--sysroot=$SYSROOT"
     
     # Configure and build libtiff
     INSTALL_DIR="/tmp/libtiff-install-${ANDROID_ABI}"
