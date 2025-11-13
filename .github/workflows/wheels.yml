@@ -135,16 +135,35 @@ jobs:
             while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
               echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Checking for artifact $ARTIFACT_NAME..."
               
-              # Try to download the artifact
-              # Note: actions/download-artifact@v4 will fail if artifact doesn't exist yet
-              if gh run download ${{ github.run_id }} -n "$ARTIFACT_NAME" -D "/tmp/build_deps/${dep_name}" 2>/dev/null; then
-                echo "✓ Successfully downloaded artifact for $dep_name"
+              # Use GitHub API to check if artifact exists
+              ARTIFACTS_JSON=$(curl -s -H "Authorization: token ${{ github.token }}" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts")
+              
+              # Check if our artifact exists
+              ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .id")
+              
+              if [ -n "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+                echo "✓ Found artifact with ID: $ARTIFACT_ID"
+                
+                # Download the artifact using GitHub API
+                mkdir -p "/tmp/build_deps/${dep_name}"
+                DOWNLOAD_URL=$(echo "$ARTIFACTS_JSON" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url")
+                
+                echo "Downloading artifact from: $DOWNLOAD_URL"
+                curl -L -H "Authorization: token ${{ github.token }}" \
+                  -o "/tmp/build_deps/${dep_name}.zip" "$DOWNLOAD_URL"
+                
+                # Extract the artifact
+                unzip -q "/tmp/build_deps/${dep_name}.zip" -d "/tmp/build_deps/${dep_name}"
+                rm "/tmp/build_deps/${dep_name}.zip"
                 
                 # Install the wheel
                 if ls /tmp/build_deps/${dep_name}/*.whl 1> /dev/null 2>&1; then
                   echo "Installing wheel(s) from $dep_name..."
                   python -m pip install /tmp/build_deps/${dep_name}/*.whl
                   echo "✓ Installed $dep_name successfully"
+                else
+                  echo "Warning: No wheel files found in artifact for $dep_name"
                 fi
                 break
               else
@@ -164,8 +183,6 @@ jobs:
           done
           
           echo "All build dependencies installed successfully"
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Download package source
         if: steps.check-skip.outputs.skip != 'true'
