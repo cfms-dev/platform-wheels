@@ -1,0 +1,5 @@
+package:
+  name: numpy
+  host_dependencies:
+  - libopenblas-dev
+  - liblapack-dev

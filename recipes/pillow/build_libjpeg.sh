@@ -148,6 +148,15 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
     echo "Using SDK: $SDK_NAME at $SDK_PATH"
     
     # Determine architecture
+    if [ "$CIBW_ARCHS" = "all" ]; then
+        echo "Building all iOS architectures (arm64 and x86_64)"
+        for ARCH in arm64 x86_64; do
+            echo "Starting sub-build for: $ARCH"
+            CIBW_ARCHS="$ARCH" bash "$0"
+        done
+        exit 0
+    fi
+    
     case "$CIBW_ARCHS" in
         arm64)
             if [ "$SDK_NAME" = "iphoneos" ]; then
