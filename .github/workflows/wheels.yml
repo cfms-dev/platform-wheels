@@ -219,8 +219,25 @@ jobs:
             for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
             for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
           fi
-          # Find the extracted directory (exclude common repo directories)
-          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "." | head -n 1)
+          # Find the extracted directory (exclude common repo directories and scripts)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
+          
+          # Validate that PACKAGE_DIR is set and exists
+          if [ -z "$PACKAGE_DIR" ]; then
+            echo "ERROR: Could not find extracted package directory"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
+          
+          # Validate that the directory contains a Python package configuration file
+          if [ ! -f "$PACKAGE_DIR/setup.py" ] && [ ! -f "$PACKAGE_DIR/setup.cfg" ] && [ ! -f "$PACKAGE_DIR/pyproject.toml" ]; then
+            echo "ERROR: Package directory does not contain setup.py, setup.cfg, or pyproject.toml"
+            echo "Directory contents:"
+            ls -la "$PACKAGE_DIR"
+            exit 1
+          fi
+          
           echo "PACKAGE_DIR=$PACKAGE_DIR" >> "$GITHUB_ENV"
           echo "Building package in: $PACKAGE_DIR"
 
