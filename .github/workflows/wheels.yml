@@ -287,8 +287,8 @@ jobs:
           echo "All patches applied successfully"
 
       - name: Build wheels
+        working-directory: ${{ env.PACKAGE_DIR }}
         if: steps.check-skip.outputs.skip != 'true'
-        uses: pypa/cibuildwheel@v3.3.0
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
@@ -299,7 +299,6 @@ jobs:
           # Set HOST_DEPENDENCIES for use in build scripts
           HOST_DEPENDENCIES: ${{ join(matrix.package.host_dependencies, ' ') }}
           # Apply package-specific cibuildwheel environment variables if specified
-          # The setup script will be sourced to set library paths automatically
           CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
           # Override before_all if specified in recipe (empty string disables it)
           # If host dependencies exist and before_all is set, append the env setup script
@@ -310,16 +309,21 @@ jobs:
               if [ -f "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh" ]; then
                 # Run script in bash, capture environment variables, and source them in current shell
                 bash -c ". '$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh' >/dev/null 2>&1 && env" | \
-                  grep -E '^(CFLAGS|CPPFLAGS|LDFLAGS|PKG_CONFIG_PATH|.*_(INCLUDE|LIB)_DIR)=' | \
-                  sed 's/^/export /' | sed 's/=/="/' | sed 's/$/"/' > /tmp/build_env.sh
+              grep -E '^(CFLAGS|CPPFLAGS|LDFLAGS|PKG_CONFIG_PATH|.*_(INCLUDE|LIB)_DIR)=' | \
+              sed 's/^/export /' | sed 's/=/="/' | sed 's/$/"/' > /tmp/build_env.sh
                 . /tmp/build_env.sh
                 rm /tmp/build_env.sh
               fi
             fi
-          # Override config_settings if specified in recipe
-          CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
-        with:
-          package-dir: ${{ env.PACKAGE_DIR }}
+              # Override config_settings if specified in recipe
+              CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel==3.3.0
+          echo "Running cibuildwheel (platform=$CIBW_PLATFORM, archs=$CIBW_ARCHS) in $(pwd)"
+          ls -la
+          # Run cibuildwheel from the package directory; output wheels to ./wheelhouse
+          python -m cibuildwheel --output-dir wheelhouse .
 
       - uses: actions/upload-artifact@v4
         if: steps.check-skip.outputs.skip != 'true'
