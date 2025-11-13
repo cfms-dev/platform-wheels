@@ -4,7 +4,7 @@ package:
   # version: ""  # Optional: leave empty to use latest
 
 host_dependencies:
-  - libffi-dev
+  - libffi
 
 patches:
-  - patches/mobile.patch
+  # - patches/mobile.patch
