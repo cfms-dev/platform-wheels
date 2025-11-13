@@ -1,5 +1,20 @@
 package:
   name: numpy
-  host_dependencies:
+
+host_dependencies:
   - libopenblas-dev
   - liblapack-dev
+
+# Create placeholder script that numpy's build expects
+cibw_before_all: |
+  # Create the missing cibw_before_build.sh script if numpy expects it
+  if [ ! -f "./tools/wheels/cibw_before_build.sh" ]; then
+    mkdir -p ./tools/wheels
+    cat > ./tools/wheels/cibw_before_build.sh << 'SCRIPT_EOF'
+  #!/bin/bash
+  # Placeholder script for numpy build on Android/iOS
+  set -e
+  echo "NumPy cibw_before_build.sh placeholder for cross-compilation"
+  SCRIPT_EOF
+    chmod +x ./tools/wheels/cibw_before_build.sh
+  fi
