@@ -184,6 +184,9 @@ jobs:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
           CIBW_BUILD: cp314-*
+          # Pass through environment variables needed by build scripts
+          CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE
+          CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE
           # Apply package-specific cibuildwheel environment variables if specified
           CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
           # Override before_all if specified in recipe (empty string disables it)

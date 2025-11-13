@@ -159,21 +159,31 @@ When building for Android/iOS:
 
 1. **Host dependencies** installed via `apt-get` (Linux) or `brew` (macOS) provide libraries for the **build host** architecture (x86_64), not the **target** architecture (ARM64).
 
-2. **Patches are essential** for packages that use pkg-config or system headers. The patch should:
+2. **For packages requiring native libraries** (like cffi requiring libffi):
+   - Create a `cibw_before_all` script that cross-compiles the library for the target architecture
+   - Use the Android NDK or iOS SDK toolchain
+   - Install to a temporary location (e.g., `/tmp/libffi-install-arm64-v8a`)
+   - Export environment variables (FFI_INCLUDE_DIR, FFI_LIB_DIR) for the package build
+
+3. **Patches are essential** for packages that use pkg-config or system headers. The patch should:
    - Disable pkg-config detection
    - Remove hardcoded system include directories
+   - Use environment variables (FFI_INCLUDE_DIR, FFI_LIB_DIR) if available
    - Allow the cross-compiler toolchain to find headers
 
-3. **cibuildwheel environment overrides** help control the build:
+4. **cibuildwheel environment overrides** help control the build:
    - `cibw_environment`: Set environment variables (e.g., disable PKG_CONFIG)
-   - `cibw_before_all`: Override or disable before_all scripts
+   - `cibw_before_all`: Build native dependencies for target architecture
    - `cibw_config_settings`: Control build-time configuration
 
-4. **Example: cffi for Android/iOS**
-   - Requires libffi (Android NDK provides it)
-   - Needs patch to disable pkg-config and system includes
+5. **Example: cffi for Android/iOS**
+   - Requires libffi compiled for target architecture
+   - `cibw_before_all` script (`build_libffi.sh`) cross-compiles libffi using Android NDK
+   - Exports FFI_INCLUDE_DIR and FFI_LIB_DIR pointing to cross-compiled libffi
+   - Patch disables pkg-config and uses FFI_INCLUDE_DIR/FFI_LIB_DIR environment variables
    - Sets `PKG_CONFIG=""` to prevent finding host libraries
-   - The mobile.patch (from flet-dev/mobile-forge) handles setup.py changes
+   
+   See `recipes/cffi/` for a complete working example.
 
 ## Priority
 

@@ -6,10 +6,34 @@ package:
 host_dependencies:
   - libffi-dev
 
+# Build libffi for the target architecture before building cffi
+# This script downloads, cross-compiles, and installs libffi for Android/iOS
+# Then exports FFI_INCLUDE_DIR and FFI_LIB_DIR which will be available to the build
+cibw_before_all: |
+  bash $GITHUB_WORKSPACE/recipes/cffi/build_libffi.sh
+  # Set FFI paths based on architecture for Android
+  if [ "$CIBW_PLATFORM" = "android" ]; then
+    case "$CIBW_ARCHS" in
+      arm64_v8a|aarch64)
+        export FFI_INCLUDE_DIR="/tmp/libffi-install-arm64-v8a/include"
+        export FFI_LIB_DIR="/tmp/libffi-install-arm64-v8a/lib"
+        ;;
+      x86_64)
+        export FFI_INCLUDE_DIR="/tmp/libffi-install-x86_64/include"
+        export FFI_LIB_DIR="/tmp/libffi-install-x86_64/lib"
+        ;;
+    esac
+  elif [ "$CIBW_PLATFORM" = "ios" ]; then
+    export FFI_INCLUDE_DIR="/tmp/libffi-install-ios/include"
+    export FFI_LIB_DIR="/tmp/libffi-install-ios/lib"
+  fi
+  echo "FFI_INCLUDE_DIR=$FFI_INCLUDE_DIR"
+  echo "FFI_LIB_DIR=$FFI_LIB_DIR"
+
 # CIBW environment variables to help with cross-compilation
-# For Android/iOS, we need to avoid system pkg-config and use patches
+# PKG_CONFIG="" disables pkg-config to avoid finding host libraries
 cibw_environment:
-  PKG_CONFIG: ""  # Disable pkg-config to avoid finding host libraries
+  PKG_CONFIG: ""
   
 patches:
-  - patches/mobile.patch  # Disables pkg-config and system includes for cross-compilation
+  - patches/mobile.patch  # Disables pkg-config, uses FFI_INCLUDE_DIR/FFI_LIB_DIR env vars
