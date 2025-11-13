@@ -1,0 +1,26 @@
+# Platform Wheels Package Configuration
+# This file allows advanced configuration for building Python wheels
+#
+# Format:
+# packages:
+#   - name: package-name
+#     version: "==1.0.0"  # Optional: version constraint
+#     source: "pypi"  # Optional: "pypi" (default), "url", "git"
+#     url: "https://..."  # Required if source is "url" or "git"
+#     host_dependencies:  # Optional: packages needed on the host system
+#       - libffi-dev
+#       - libssl-dev
+#     pip_dependencies:  # Optional: Python packages needed to build
+#       - setuptools
+#       - wheel
+#     patches:  # Optional: list of patch files to apply
+#       - https://example.com/patch1.patch
+#       - https://example.com/patch2.patch
+
+packages:
+  # Simple package from PyPI
+  - name: pyyaml
+
+  # Package with version constraint
+  - name: websockets
+    version: ">=11.0"
