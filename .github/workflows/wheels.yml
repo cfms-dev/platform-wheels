@@ -194,61 +194,78 @@ jobs:
         if: steps.check-skip.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
+          # Create a temporary directory for extraction
+          mkdir -p /tmp/package_extract
+          cd /tmp/package_extract
+          
           # Check if custom URL is specified
           if [ "${{ matrix.package.source }}" = "url" ] && [ -n "${{ matrix.package.url }}" ]; then
             echo "Downloading from custom URL: ${{ matrix.package.url }}"
             curl -L -o package_source "${{ matrix.package.url }}"
-            # Determine file type and extract
+            # Determine file type and extract in-place
             file package_source
             if file package_source | grep -q "gzip"; then
               mv package_source package.tar.gz
-              tar -xzf package.tar.gz && rm package.tar.gz
+              tar -xzf package.tar.gz --strip-components=1 && rm package.tar.gz
             elif file package_source | grep -q "Zip"; then
               mv package_source package.zip
+              # Unzip and move contents up one level
               unzip package.zip && rm package.zip
+              SUBDIR=$(find . -maxdepth 1 -type d -not -name "." | head -n 1)
+              if [ -n "$SUBDIR" ]; then
+                mv "$SUBDIR"/* "$SUBDIR"/.[!.]* . 2>/dev/null || true
+                rmdir "$SUBDIR"
+              fi
             elif file package_source | grep -q "tar"; then
               mv package_source package.tar
-              tar -xf package.tar && rm package.tar
+              tar -xf package.tar --strip-components=1 && rm package.tar
             else
               echo "Unknown file type, trying as tarball"
               mv package_source package.tar.gz
-              tar -xzf package.tar.gz && rm package.tar.gz
+              tar -xzf package.tar.gz --strip-components=1 && rm package.tar.gz
             fi
           elif [ "${{ matrix.package.source }}" = "git" ] && [ -n "${{ matrix.package.url }}" ]; then
             echo "Cloning from git: ${{ matrix.package.url }}"
-            git clone "${{ matrix.package.url }}" package_dir
+            # Clone and move contents to current directory
+            git clone "${{ matrix.package.url }}" temp_clone
+            mv temp_clone/* temp_clone/.[!.]* . 2>/dev/null || true
+            rm -rf temp_clone
           else
             echo "Downloading from PyPI: ${{ matrix.package.spec }}"
             pip download --no-binary :all: --no-deps "${{ matrix.package.spec }}"
-            # Extract the downloaded package
-            for file in *.tar.gz; do [ -f "$file" ] && tar -xzf "$file" && rm "$file"; done
-            for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
-            for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
+            # Extract the downloaded package in-place
+            for file in *.tar.gz; do 
+              if [ -f "$file" ]; then
+                tar -xzf "$file" --strip-components=1 && rm "$file"
+              fi
+            done
+            for file in *.zip; do 
+              if [ -f "$file" ]; then
+                unzip "$file" && rm "$file"
+                SUBDIR=$(find . -maxdepth 1 -type d -not -name "." | head -n 1)
+                if [ -n "$SUBDIR" ]; then
+                  mv "$SUBDIR"/* "$SUBDIR"/.[!.]* . 2>/dev/null || true
+                  rmdir "$SUBDIR"
+                fi
+              fi
+            done
+            for file in *.tar; do 
+              if [ -f "$file" ]; then
+                tar -xf "$file" --strip-components=1 && rm "$file"
+              fi
+            done
           fi
-          # Find the extracted directory (exclude common repo directories and scripts)
-          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
           
-          # Validate that PACKAGE_DIR is set and exists
-          if [ -z "$PACKAGE_DIR" ]; then
-            echo "ERROR: Could not find extracted package directory"
-            echo "Current directory contents:"
+          # Validate that the directory contains a Python package configuration file
+          if [ ! -f "setup.py" ] && [ ! -f "setup.cfg" ] && [ ! -f "pyproject.toml" ]; then
+            echo "ERROR: Package directory does not contain setup.py, setup.cfg, or pyproject.toml"
+            echo "Directory contents:"
             ls -la
             exit 1
           fi
           
-          # Convert to absolute path to ensure cibuildwheel can find it
-          PACKAGE_DIR=$(cd "$PACKAGE_DIR" && pwd)
-          
-          # Validate that the directory contains a Python package configuration file
-          if [ ! -f "$PACKAGE_DIR/setup.py" ] && [ ! -f "$PACKAGE_DIR/setup.cfg" ] && [ ! -f "$PACKAGE_DIR/pyproject.toml" ]; then
-            echo "ERROR: Package directory does not contain setup.py, setup.cfg, or pyproject.toml"
-            echo "Directory contents:"
-            ls -la "$PACKAGE_DIR"
-            exit 1
-          fi
-          
-          echo "PACKAGE_DIR=$PACKAGE_DIR" >> "$GITHUB_ENV"
-          echo "Building package in: $PACKAGE_DIR"
+          echo "PACKAGE_DIR=/tmp/package_extract" >> "$GITHUB_ENV"
+          echo "Building package in: /tmp/package_extract"
 
       - name: Apply patches
         if: steps.check-skip.outputs.skip != 'true' && toJSON(matrix.package.patches) != '[]'
@@ -322,7 +339,8 @@ jobs:
           # Override config_settings if specified in recipe
           CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
         with:
-          package-dir: ${{ env.PACKAGE_DIR }}
+          # Run cibuildwheel in the extracted package directory
+          working-directory: ${{ env.PACKAGE_DIR }}
 
       - uses: actions/upload-artifact@v4
         if: steps.check-skip.outputs.skip != 'true'
