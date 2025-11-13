@@ -18,9 +18,9 @@ jobs:
       contents: read
     outputs:
       packages: ${{ steps.set-packages.outputs.packages }}
-      numpy: ${{ steps.set-packages.outputs.numpy }}
-      pillow: ${{ steps.set-packages.outputs.pillow }}
-      others: ${{ steps.set-packages.outputs.others }}
+      dependency-packages: ${{ steps.set-packages.outputs.dependency-packages }}
+      dependent-packages: ${{ steps.set-packages.outputs.dependent-packages }}
+      independent-packages: ${{ steps.set-packages.outputs.independent-packages }}
     steps:
       - uses: actions/checkout@v5
       
@@ -38,24 +38,29 @@ jobs:
           packages=$(python read_packages.py)
           echo "packages=$packages" >> "$GITHUB_OUTPUT"
           
-          # Extract numpy (dependency), pillow (has dependencies), and others
-          numpy=$(echo "$packages" | jq -c '[.[] | select(.name == "numpy")]')
-          pillow=$(echo "$packages" | jq -c '[.[] | select(.name == "pillow")]')
-          others=$(echo "$packages" | jq -c '[.[] | select(.name != "numpy" and .name != "pillow")]')
+          # Auto-detect package groups based on their characteristics:
+          # 1. dependency-packages: packages that other packages depend on (is_dependency: true)
+          # 2. dependent-packages: packages that have dependencies (build_dependencies: [...])
+          # 3. independent-packages: packages with no dependencies and not depended upon
           
-          echo "numpy=$numpy" >> "$GITHUB_OUTPUT"
-          echo "pillow=$pillow" >> "$GITHUB_OUTPUT"
-          echo "others=$others" >> "$GITHUB_OUTPUT"
+          dependency_packages=$(echo "$packages" | jq -c '[.[] | select(.is_dependency == true)]')
+          dependent_packages=$(echo "$packages" | jq -c '[.[] | select((.build_dependencies | length) > 0)]')
+          independent_packages=$(echo "$packages" | jq -c '[.[] | select(.is_dependency == false and ((.build_dependencies | length) == 0))]')
           
-          echo "Package groups:"
-          echo "  numpy (dependency): $(echo "$numpy" | jq length) package"
-          echo "  pillow (depends on numpy): $(echo "$pillow" | jq length) package"
-          echo "  others (no dependencies): $(echo "$others" | jq length) packages"
+          echo "dependency-packages=$dependency_packages" >> "$GITHUB_OUTPUT"
+          echo "dependent-packages=$dependent_packages" >> "$GITHUB_OUTPUT"
+          echo "independent-packages=$independent_packages" >> "$GITHUB_OUTPUT"
+          
+          echo "Package groups (auto-detected):"
+          echo "  Dependency packages (others depend on these): $(echo "$dependency_packages" | jq -r '[.[].name] | join(", ")')"
+          echo "  Dependent packages (depend on others): $(echo "$dependent_packages" | jq -r '[.[].name] | join(", ")')"
+          echo "  Independent packages (no dependencies): $(echo "$independent_packages" | jq -r '[.[].name] | join(", ")')"
 
-  # Build numpy separately since it's a dependency of pillow
-  build_numpy:
-    name: Build numpy for ${{ matrix.os }}
+  # Build packages that other packages depend on (e.g., numpy)
+  build_dependency_packages:
+    name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
     needs: read_packages
+    if: fromJson(needs.read_packages.outputs.dependency-packages)[0] != null
     runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
@@ -65,7 +70,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.read_packages.outputs.numpy) }}
+        package: ${{ fromJson(needs.read_packages.outputs.dependency-packages) }}
         os: [android-arm64_v8a, android-x86_64, ios]
         include:
           - os: android-arm64_v8a
@@ -261,10 +266,11 @@ jobs:
                 . /tmp/build_env.sh
                 rm /tmp/build_env.sh
 
-  # Build packages without dependencies (except numpy which is built separately)
-  build_packages_no_deps:
+  # Build packages with no dependencies and not depended upon by others
+  build_independent_packages:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
     needs: read_packages
+    if: fromJson(needs.read_packages.outputs.independent-packages)[0] != null
     runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
@@ -274,7 +280,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.read_packages.outputs.others) }}
+        package: ${{ fromJson(needs.read_packages.outputs.independent-packages) }}
         os: [android-arm64_v8a, android-x86_64, ios]
         include:
           - os: android-arm64_v8a
@@ -469,10 +475,11 @@ jobs:
                 . /tmp/build_env.sh
                 rm /tmp/build_env.sh
 
-  # Build pillow - depends only on numpy, not all packages
-  build_pillow:
-    name: Build pillow for ${{ matrix.os }}
-    needs: [read_packages, build_numpy]  # Only waits for numpy!
+  # Build packages that have dependencies on other packages
+  build_dependent_packages:
+    name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
+    needs: [read_packages, build_dependency_packages]
+    if: fromJson(needs.read_packages.outputs.dependent-packages)[0] != null
     runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
@@ -482,7 +489,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: ${{ fromJson(needs.read_packages.outputs.pillow) }}
+        package: ${{ fromJson(needs.read_packages.outputs.dependent-packages) }}
         os: [android-arm64_v8a, android-x86_64, ios]
         include:
           - os: android-arm64_v8a
@@ -501,7 +508,7 @@ jobs:
 
   deploy_index:
     name: Deploy wheel index to GitHub Pages
-    needs: [read_packages, build_numpy, build_packages_no_deps, build_pillow]
+    needs: [read_packages, build_dependency_packages, build_independent_packages, build_dependent_packages]
     runs-on: ubuntu-latest
     if: always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'release')
     permissions:
