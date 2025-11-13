@@ -1,10 +1,6 @@
-diff --git a/setup.py b/setup.py
-index f9cabaa..c592203 100644
---- a/setup.py
-+++ b/setup.py
-@@ -5,12 +5,25 @@ import sys, os, subprocess
- from setuptools.command.build_ext import build_ext
- import setuptools
+--- cffi-2.0.0-orig/setup.py	2025-11-13 02:30:56.484275022 +0000
++++ cffi-2.0.0/setup.py	2025-11-13 02:31:11.459382567 +0000
+@@ -9,10 +9,19 @@
  
  sources = ['src/c/_cffi_backend.c']
  libraries = ['ffi']
@@ -18,9 +14,7 @@ index f9cabaa..c592203 100644
 +    print(f"Using FFI_INCLUDE_DIR: {os.environ['FFI_INCLUDE_DIR']}")
 +
  define_macros = [('FFI_BUILDING', '1')]   # for linking with libffi static library
--library_dirs = []
-+
-+library_dirs = []
+ library_dirs = []
 +if os.environ.get('FFI_LIB_DIR'):
 +    library_dirs.append(os.environ['FFI_LIB_DIR'])
 +    print(f"Using FFI_LIB_DIR: {os.environ['FFI_LIB_DIR']}")
@@ -28,34 +22,33 @@ index f9cabaa..c592203 100644
  extra_compile_args = []
  extra_link_args = []
  
-@@ -144,7 +157,7 @@ if sys.platform == "win32" and uses_msvc():
-          sources.extend(os.path.join(COMPILE_LIBFFI, filename)
-                      for filename in _filenames)
+@@ -150,7 +159,7 @@
+         sources.extend(os.path.join(COMPILE_LIBFFI, filename)
+                     for filename in _filenames)
  else:
 -    use_pkg_config()
 +    pass  # Don't use pkg-config for cross-compilation
      ask_supports_thread()
      ask_supports_sync_synchronize()
  
-diff --git a/src/c/malloc_closure.h b/src/c/malloc_closure.h
-index bebb93d..f82dbe4 100644
---- a/src/c/malloc_closure.h
-+++ b/src/c/malloc_closure.h
-@@ -42,6 +42,8 @@ emutramp_enabled_check (void)
-          return 0;
-      ret = 0;
-  
+--- cffi-2.0.0-orig/src/c/malloc_closure.h	2025-11-13 02:30:56.486275036 +0000
++++ cffi-2.0.0/src/c/malloc_closure.h	2025-11-13 02:31:23.106464086 +0000
+@@ -42,6 +42,9 @@
+         return 0;
+     ret = 0;
+ 
++
 +    /* Chaquopy: getline requires API level 18, but PaX isn't used by Android anyway. */
 +    #if __ANDROID_API__ >= 18
-      while (getline (&buf, &len, f) != -1)
-          if (!strncmp (buf, "PaX:", 4))
-              {
-@@ -51,6 +53,8 @@ emutramp_enabled_check (void)
-                  break;
-              }
-      free (buf);
+     while (getline (&buf, &len, f) != -1)
+         if (!strncmp (buf, "PaX:", 4))
+             {
+@@ -51,6 +54,8 @@
+                 break;
+             }
+     free (buf);
 +    #endif
-+    
-      fclose (f);
-      return ret;
++
+     fclose (f);
+     return ret;
  }
