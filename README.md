@@ -158,9 +158,49 @@ packages:
 - `alias`: Alternative package name for the index (optional). When specified, creates indexes for both the `name` and `alias` with appropriately renamed wheel files
 - `source`: Source type (optional: `pypi`, `url`, `git`; default: `pypi`)
 - `url`: Custom URL for `url` or `git` sources (required if source is not `pypi`)
-- `host_dependencies`: System packages to install before building (optional)
+- `host_dependencies`: System packages to install before building (optional). For cross-compilation, you should provide custom build scripts via `cibw_before_all` to compile these libraries for the target architecture
 - `pip_dependencies`: Python packages needed for building (optional)
+- `build_dependencies`: List of other packages that must be built first (optional). Useful when post-compilation tests require pre-built wheels of other packages
 - `patches`: List of patch file URLs to apply to the source code (optional)
+
+**Build Dependencies:**
+
+The `build_dependencies` field allows you to specify that a package needs other packages to be built before it starts building. This is particularly useful when:
+- Post-compilation tests require pre-built wheels of other packages
+- A package needs to import/test against another package during its build process
+
+Example:
+```yaml
+packages:
+  - name: cffi
+    host_dependencies:
+      - libffi-dev
+
+  - name: cryptography
+    build_dependencies:
+      - cffi  # Wait for cffi to build first
+    host_dependencies:
+      - libssl-dev
+```
+
+The build system will automatically:
+1. Sort packages based on their dependencies (topological sort)
+2. Build packages in the correct order
+3. Wait for dependency wheels to be available before starting dependent builds
+4. Install dependency wheels before building packages that depend on them
+
+**Host Dependencies and Cross-Compilation:**
+
+When specifying `host_dependencies`, you need to ensure these libraries are compiled for the target architecture (Android/iOS). The build system provides:
+
+1. **Manual approach** (current, recommended): Create custom build scripts in `cibw_before_all` that cross-compile the libraries
+   - Example: `recipes/cffi/build_libffi.sh` shows how to cross-compile libffi
+   
+2. **Automatic environment setup**: After your `cibw_before_all` script runs, the system automatically sources `scripts/setup_cross_compile_env.sh` which:
+   - Searches for cross-compiled libraries in `/tmp/*-install-*` directories
+   - Sets environment variables like `LIBFFI_INCLUDE_DIR`, `LIBFFI_LIB_DIR`, etc.
+   - Adds library paths to `CFLAGS`, `LDFLAGS`, and `PKG_CONFIG_PATH`
+   - Makes it easier for packages to discover cross-compiled dependencies
 
 **Configuration Priority:**
 1. `recipes/` directory (highest priority - recommended for packages with patches)

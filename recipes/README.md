@@ -42,6 +42,12 @@ pip_dependencies:
   - setuptools
   - wheel
 
+# Optional: Other packages that must be built first
+# This ensures pre-built wheels are available for testing
+build_dependencies:
+  - cffi
+  - numpy
+
 # Optional: Patches to apply (can be URLs or local paths)
 patches:
   - patches/fix-build.patch  # Local patch file (relative to recipe directory)
@@ -182,8 +188,42 @@ When building for Android/iOS:
    - Exports FFI_INCLUDE_DIR and FFI_LIB_DIR pointing to cross-compiled libffi
    - Patch disables pkg-config and uses FFI_INCLUDE_DIR/FFI_LIB_DIR environment variables
    - Sets `PKG_CONFIG=""` to prevent finding host libraries
+   - After custom build scripts run, `scripts/setup_cross_compile_env.sh` automatically:
+     - Searches for cross-compiled libraries in common locations
+     - Sets environment variables for discovered libraries
+     - Adds paths to CFLAGS, LDFLAGS, and PKG_CONFIG_PATH
    
    See `recipes/cffi/` for a complete working example.
+
+## Build Dependencies
+
+The `build_dependencies` field allows you to specify that a package needs other packages to be built before it starts building. This is particularly useful when:
+- Post-compilation tests require pre-built wheels of other packages
+- A package needs to import/test against another package during its build process
+
+Example:
+
+```yaml
+# recipes/package-with-tests/recipe.yaml
+package:
+  name: package-with-tests
+
+build_dependencies:
+  - cffi
+  - numpy
+
+# This package will:
+# 1. Wait for cffi and numpy to finish building
+# 2. Download and install their wheels before building
+# 3. Can then import and test against these packages
+```
+
+The build system automatically:
+1. Sorts all packages by their build dependencies (topological sort)
+2. Builds packages in the correct order
+3. Waits for dependency wheels to be available
+4. Installs dependency wheels before building dependent packages
+5. Detects circular dependencies and reports errors
 
 ## Priority
 

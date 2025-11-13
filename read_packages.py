@@ -52,6 +52,7 @@ def read_recipe(recipe_dir):
         'source': recipe.get('source', pkg.get('source', 'pypi')),
         'host_dependencies': recipe.get('host_dependencies', []),
         'pip_dependencies': recipe.get('pip_dependencies', []),
+        'build_dependencies': recipe.get('build_dependencies', []),
         'patches': [],
         'cibw_environment': '',  # Will be formatted as CIBW_ENVIRONMENT string
         'cibw_before_all': recipe.get('cibw_before_all', ''),
@@ -149,6 +150,7 @@ def read_yaml_config(config_file):
             'source': pkg.get('source', 'pypi'),
             'host_dependencies': pkg.get('host_dependencies', []),
             'pip_dependencies': pkg.get('pip_dependencies', []),
+            'build_dependencies': pkg.get('build_dependencies', []),
             'patches': pkg.get('patches', []),
             'cibw_environment': '',
             'cibw_before_all': pkg.get('cibw_before_all', ''),
@@ -194,6 +196,7 @@ def read_txt_config(config_file):
                 'source': 'pypi',
                 'host_dependencies': [],
                 'pip_dependencies': [],
+                'build_dependencies': [],
                 'patches': [],
                 'cibw_environment': '',
                 'cibw_before_all': '',
@@ -203,6 +206,47 @@ def read_txt_config(config_file):
             packages_data.append(package_info)
     
     return packages_data
+
+
+def topological_sort(packages_data):
+    """Sort packages based on build_dependencies using topological sort."""
+    # Build a mapping from package names to package data
+    pkg_map = {pkg['name']: pkg for pkg in packages_data}
+    
+    # Build adjacency list (package -> list of packages that depend on it)
+    graph = {pkg['name']: [] for pkg in packages_data}
+    in_degree = {pkg['name']: 0 for pkg in packages_data}
+    
+    for pkg in packages_data:
+        for dep in pkg.get('build_dependencies', []):
+            if dep in pkg_map:
+                graph[dep].append(pkg['name'])
+                in_degree[pkg['name']] += 1
+            else:
+                print(f"Warning: Package {pkg['name']} depends on {dep} which is not in the package list", file=sys.stderr)
+    
+    # Kahn's algorithm for topological sort
+    queue = [name for name, degree in in_degree.items() if degree == 0]
+    sorted_packages = []
+    
+    while queue:
+        # Sort queue for deterministic output
+        queue.sort()
+        current = queue.pop(0)
+        sorted_packages.append(pkg_map[current])
+        
+        for neighbor in graph[current]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+    
+    # Check for cycles
+    if len(sorted_packages) != len(packages_data):
+        remaining = [name for name, degree in in_degree.items() if degree > 0]
+        print(f"Error: Circular dependency detected among packages: {', '.join(remaining)}", file=sys.stderr)
+        sys.exit(1)
+    
+    return sorted_packages
 
 
 def main():
@@ -240,6 +284,9 @@ def main():
         print("Error: No package configuration found (checked recipes/, packages.yaml, packages.txt)", file=sys.stderr)
         sys.exit(1)
     
+    # Sort packages by build dependencies
+    packages_data = topological_sort(packages_data)
+    
     # Output as JSON
     print(json.dumps(packages_data))
     
@@ -249,6 +296,8 @@ def main():
         info_parts = []
         if pkg['host_dependencies']:
             info_parts.append(f"host deps: {', '.join(pkg['host_dependencies'])}")
+        if pkg.get('build_dependencies'):
+            info_parts.append(f"build deps: {', '.join(pkg['build_dependencies'])}")
         if pkg['patches']:
             info_parts.append(f"patches: {len(pkg['patches'])}")
         info = f" ({'; '.join(info_parts)})" if info_parts else ""

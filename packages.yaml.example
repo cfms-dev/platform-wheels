@@ -53,6 +53,14 @@ packages:
       - https://example.com/fix-build.patch
       - https://example.com/mobile-support.patch
 
+  # Package with build dependencies (other packages that must be built first)
+  # This is useful when post-compilation tests need pre-built packages
+  - name: package-with-tests
+    build_dependencies:
+      - cffi
+      - numpy
+    # This package will wait for cffi and numpy to finish building before starting
+
   # Package from custom URL (tarball)
   - name: custom-package
     source: url
@@ -78,6 +86,8 @@ packages:
     pip_dependencies:
       - setuptools
       - wheel
+    build_dependencies:
+      - cffi
 
 # Note: For backward compatibility, you can still use packages.txt
 # The system will automatically detect which format you're using
