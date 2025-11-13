@@ -236,6 +236,9 @@ jobs:
             exit 1
           fi
           
+          # Convert to absolute path to ensure cibuildwheel can find it
+          PACKAGE_DIR=$(cd "$PACKAGE_DIR" && pwd)
+          
           # Validate that the directory contains a Python package configuration file
           if [ ! -f "$PACKAGE_DIR/setup.py" ] && [ ! -f "$PACKAGE_DIR/setup.cfg" ] && [ ! -f "$PACKAGE_DIR/pyproject.toml" ]; then
             echo "ERROR: Package directory does not contain setup.py, setup.cfg, or pyproject.toml"
