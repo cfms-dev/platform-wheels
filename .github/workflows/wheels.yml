@@ -34,7 +34,7 @@ jobs:
         run: |
           # Use new read_packages.py script that supports both YAML and txt formats
           packages=$(python read_packages.py)
-          echo "packages=$packages" >> $GITHUB_OUTPUT
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
           echo "Packages to build:"
           echo "$packages" | jq -r '.[] | "  - \(.spec) [\(.source)]"'
 
@@ -42,9 +42,6 @@ jobs:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
     needs: read_packages
     runs-on: ${{ matrix.runs-on }}
-    # Skip if package has this platform in skip_platforms list
-    if: |
-      !contains(matrix.package.skip_platforms, matrix.platform)
     permissions:
       contents: read
     strategy:
@@ -67,22 +64,39 @@ jobs:
             archs: auto
 
     steps:
+      - name: Check if platform should be skipped
+        id: check-skip
+        run: |
+          # Check if this platform is in the skip_platforms list
+          skip_platforms='${{ toJSON(matrix.package.skip_platforms) }}'
+          current_platform='${{ matrix.platform }}'
+          
+          if echo "$skip_platforms" | jq -e --arg platform "$current_platform" 'index($platform)' > /dev/null; then
+            echo "Skipping build for $current_platform (in skip_platforms list)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building for $current_platform"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      
       - uses: actions/checkout@v5
+        if: steps.check-skip.outputs.skip != 'true'
 
       - name: Set up Python
+        if: steps.check-skip.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
 
       - name: Install host dependencies (Ubuntu)
-        if: runner.os == 'Linux' && matrix.package.host_dependencies[0] != null
+        if: steps.check-skip.outputs.skip != 'true' && runner.os == 'Linux' && matrix.package.host_dependencies[0] != null
         run: |
           echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
           sudo apt-get update
           sudo apt-get install -y ${{ join(matrix.package.host_dependencies, ' ') }}
 
       - name: Install host dependencies (macOS)
-        if: runner.os == 'macOS' && matrix.package.host_dependencies[0] != null
+        if: steps.check-skip.outputs.skip != 'true' && runner.os == 'macOS' && matrix.package.host_dependencies[0] != null
         run: |
           echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
           # Map common Linux package names to macOS equivalents
@@ -95,15 +109,16 @@ jobs:
           deps="${deps//libfreetype6-dev/freetype}"
           deps="${deps//liblcms2-dev/little-cms2}"
           deps="${deps//libwebp-dev/webp}"
-          brew install $deps || true
+          brew install "$deps" || true
 
       - name: Install pip dependencies
-        if: matrix.package.pip_dependencies[0] != null
+        if: steps.check-skip.outputs.skip != 'true' && matrix.package.pip_dependencies[0] != null
         run: |
           echo "Installing pip dependencies: ${{ join(matrix.package.pip_dependencies, ' ') }}"
           python -m pip install ${{ join(matrix.package.pip_dependencies, ' ') }}
 
       - name: Download package source
+        if: steps.check-skip.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
           # Check if custom URL is specified
@@ -128,7 +143,7 @@ jobs:
             fi
           elif [ "${{ matrix.package.source }}" = "git" ] && [ -n "${{ matrix.package.url }}" ]; then
             echo "Cloning from git: ${{ matrix.package.url }}"
-            git clone ${{ matrix.package.url }} package_dir
+            git clone "${{ matrix.package.url }}" package_dir
           else
             echo "Downloading from PyPI: ${{ matrix.package.spec }}"
             pip download --no-binary :all: --no-deps "${{ matrix.package.spec }}"
@@ -139,11 +154,11 @@ jobs:
           fi
           # Find the extracted directory (exclude common repo directories)
           PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "." | head -n 1)
-          echo "PACKAGE_DIR=$PACKAGE_DIR" >> $GITHUB_ENV
+          echo "PACKAGE_DIR=$PACKAGE_DIR" >> "$GITHUB_ENV"
           echo "Building package in: $PACKAGE_DIR"
 
       - name: Apply patches
-        if: toJSON(matrix.package.patches) != '[]'
+        if: steps.check-skip.outputs.skip != 'true' && toJSON(matrix.package.patches) != '[]'
         run: |
           echo "Applying patches to package in: ${{ env.PACKAGE_DIR }}"
           cd "${{ env.PACKAGE_DIR }}"
@@ -182,6 +197,7 @@ jobs:
           echo "All patches applied successfully"
 
       - name: Build wheels
+        if: steps.check-skip.outputs.skip != 'true'
         uses: pypa/cibuildwheel@v3.2.1
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
@@ -200,6 +216,7 @@ jobs:
           package-dir: ${{ env.PACKAGE_DIR }}
 
       - uses: actions/upload-artifact@v4
+        if: steps.check-skip.outputs.skip != 'true'
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
           path: ./wheelhouse/*.whl
