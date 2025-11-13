@@ -1,8 +1,0 @@
-# Recipe for flet-libsodium package
-# libsodium crypto library built from source for mobile platforms
-package:
-  name: flet-libsodium
-  version: "1.0.20"
-
-source: url
-url: https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz

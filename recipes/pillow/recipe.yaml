@@ -19,6 +19,6 @@ cibw_environment:
   PKG_CONFIG: ""
 
 # Patch to auto-detect cross-compiled zlib (similar to cffi's approach)
-patches:
-  - patches/zlib_detect.patch
+# patches:
+#   - patches/zlib_detect.patch
 
