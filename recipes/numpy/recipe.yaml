@@ -10,9 +10,6 @@ cibw_environment:
   NPY_DISABLE_BACKTRACE: "1"
   NPY_USE_BLAS: "None"
   NPY_USE_LAPACK: "None"
-  # Suppress warnings that cause build failures on Android
-  CFLAGS: "-Wno-unknown-attributes -Wno-unused-value -Wno-ignored-attributes"
-  CXXFLAGS: "-Wno-unknown-attributes -Wno-unused-value -Wno-ignored-attributes"
 
 # Create placeholder script that numpy's build expects and configure cross-compilation
 cibw_before_all: |

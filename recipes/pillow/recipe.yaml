@@ -6,6 +6,9 @@ package:
 host_dependencies:
   - zlib1g-dev
 
+build_dependencies:
+  - numpy
+
 # Build zlib, libjpeg, and libtiff for the target architecture before building pillow
 # These scripts download, cross-compile, and install the libraries for Android/iOS
 cibw_before_all: |
