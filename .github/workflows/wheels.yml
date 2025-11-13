@@ -61,7 +61,7 @@ jobs:
           - os: ios
             runs-on: macos-latest
             platform: ios
-            archs: arm64 arm64e x86_64
+            archs: all
 
     steps:
       - name: Check if platform should be skipped
