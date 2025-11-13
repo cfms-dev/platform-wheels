@@ -1,53 +1,10 @@
 package:
   name: numpy
+  version: 1.26.2
 
-host_dependencies:
-  - libopenblas-dev
-  - liblapack-dev
+patches:
+  - mobile-1.26.0.patch
 
-# Disable features that require runtime checks during cross-compilation
-cibw_environment:
-  NPY_DISABLE_BACKTRACE: "1"
-  NPY_USE_BLAS: "None"
-  NPY_USE_LAPACK: "None"
-
-# Create placeholder script that numpy's build expects and configure cross-compilation
-cibw_before_all: |
-  # Create the missing cibw_before_build.sh script if numpy expects it
-  if [ ! -f "./tools/wheels/cibw_before_build.sh" ]; then
-    mkdir -p ./tools/wheels
-    cat > ./tools/wheels/cibw_before_build.sh << 'SCRIPT_EOF'
-  #!/bin/bash
-  # Placeholder script for numpy build on Android/iOS
-  set -e
-  echo "NumPy cibw_before_build.sh placeholder for cross-compilation"
-  SCRIPT_EOF
-    chmod +x ./tools/wheels/cibw_before_build.sh
-  fi
-  
-  # Create comprehensive Meson cross file for cross-compilation
-  cat > /tmp/meson_cross_file.txt << 'MESON_EOF'
-  [constants]
-  common_c_flags = ['-fPIC', '-D__MUSL__=1', '-I' + dist_root/'include', '-I' + dist_root/'include/lzma', '-I' + dist_root/'include/ncursesw', '-I' + dist_root/'include/readline', '-I' + dist_root/'ssl/include']
-  common_ld_flags = ['-fuse-ld=lld', '-L' + dist_root/'lib', '-L' + dist_root/'ssl/lib64', '-lpython3.14']
-
-  [built-in options]
-  c_args = common_c_flags
-  cpp_args = common_c_flags
-  c_link_args = common_ld_flags
-  cpp_link_args = common_ld_flags
-
-  [properties]
-  needs_exe_wrapper = true
-  skip_sanity_check = true
-  
-  [host_machine]
-  system = 'android'
-  cpu_family = 'aarch64'
-  cpu = 'armv8'
-  endian = 'little'
-  MESON_EOF
-
-# Configure meson-python to use the cross file
-cibw_config_settings: "setup-args=--cross-file=/tmp/meson_cross_file.txt"
-
+requirements:
+  host:
+    - ninja
