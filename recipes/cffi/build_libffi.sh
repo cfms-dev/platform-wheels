@@ -158,8 +158,8 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
     # Set install prefix based on architecture
     PREFIX="/tmp/libffi-install-ios-${ARCH}"
     
-    # Get SDK path
-    SDK_PATH=$(xcrun --sdk $SDK --show-sdk-path)
+    # Get SDK path and export it
+    export SDK_PATH=$(xcrun --sdk $SDK --show-sdk-path)
     
     # Set up compiler flags for iOS
     if [ "$SDK" = "iphoneos" ]; then
@@ -193,7 +193,8 @@ elif [ "$CIBW_PLATFORM" = "ios" ]; then
         --prefix="$PREFIX" \
         --enable-static \
         --disable-shared \
-        --disable-dependency-tracking
+        --disable-dependency-tracking \
+        --disable-builddir
     
     # Build and install
     make -j$(sysctl -n hw.ncpu || echo 4)
