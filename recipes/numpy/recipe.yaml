@@ -5,7 +5,7 @@ host_dependencies:
   - libopenblas-dev
   - liblapack-dev
 
-# Create placeholder script that numpy's build expects
+# Create placeholder script that numpy's build expects and configure cross-compilation
 cibw_before_all: |
   # Create the missing cibw_before_build.sh script if numpy expects it
   if [ ! -f "./tools/wheels/cibw_before_build.sh" ]; then
@@ -18,3 +18,13 @@ cibw_before_all: |
   SCRIPT_EOF
     chmod +x ./tools/wheels/cibw_before_build.sh
   fi
+  
+  # Create Meson cross file to tell it we're cross-compiling and can't run binaries
+  cat > /tmp/meson_cross_file.txt << 'MESON_EOF'
+  [properties]
+  needs_exe_wrapper = true
+  MESON_EOF
+
+# Configure meson-python to use the cross file
+cibw_config_settings: "setup-args=--cross-file=/tmp/meson_cross_file.txt"
+
