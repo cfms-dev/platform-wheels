@@ -1,10 +1,6 @@
 package:
   name: numpy
 
-# Skip numpy build on Android platforms due to extensive cross-compilation issues
-skip_platforms:
-  - android
-
 host_dependencies:
   - libopenblas-dev
   - liblapack-dev
