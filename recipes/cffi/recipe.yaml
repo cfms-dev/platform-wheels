@@ -8,8 +8,16 @@ host_dependencies:
 
 # Build libffi for the target architecture before building cffi
 # This script downloads, cross-compiles, and installs libffi for Android/iOS
-# The patched setup.py will automatically find the built library in /tmp/libffi-install-*/
-cibw_before_all: bash $GITHUB_WORKSPACE/recipes/cffi/build_libffi.sh
+# The script also creates /tmp/libffi_env.sh with environment variables
+# The patched setup.py will automatically find the built library
+cibw_before_all: |
+  bash $GITHUB_WORKSPACE/recipes/cffi/build_libffi.sh
+  if [ -f /tmp/libffi_env.sh ]; then
+    echo "Sourcing libffi environment variables..."
+    . /tmp/libffi_env.sh
+    echo "FFI_INCLUDE_DIR=$FFI_INCLUDE_DIR"
+    echo "FFI_LIB_DIR=$FFI_LIB_DIR"
+  fi
 
 # CIBW environment variables to help with cross-compilation
 # PKG_CONFIG="" disables pkg-config to avoid finding host libraries

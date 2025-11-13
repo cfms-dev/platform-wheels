@@ -36,7 +36,7 @@ jobs:
           packages=$(python read_packages.py)
           echo "packages=$packages" >> "$GITHUB_OUTPUT"
           echo "Packages to build:"
-          echo "$packages" | jq -r '.[] | "  - \(.spec) [\(.source)]"'
+          echo "$packages" | jq -r '.[] | "  - \(.spec) [\(.source)] (level \(.dependency_level))"'
 
   build_wheels:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
@@ -132,56 +132,49 @@ jobs:
           # Parse build dependencies
           echo "$BUILD_DEPS" | jq -r '.[]' | while read -r dep_name; do
             echo "Waiting for dependency: $dep_name (platform: ${{ matrix.os }})"
-            
-            # Wait for the artifact to be available (polling approach)
-            MAX_ATTEMPTS=60  # 60 attempts * 30 seconds = 30 minutes max wait
-            ATTEMPT=0
             ARTIFACT_NAME="cibw-wheels-${{ matrix.os }}-${dep_name}"
             
+            # Use actions/download-artifact which is more efficient
+            # Try to download the artifact with retries
+            MAX_ATTEMPTS=40  # 40 attempts with exponential backoff
+            ATTEMPT=0
+            WAIT_TIME=5  # Start with 5 seconds
+            
             while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-              echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Checking for artifact $ARTIFACT_NAME..."
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Downloading artifact $ARTIFACT_NAME..."
               
-              # Use GitHub API to check if artifact exists
-              ARTIFACTS_JSON=$(curl -s -H "Authorization: token ${{ github.token }}" \
-                "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts")
-              
-              # Check if our artifact exists
-              ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .id")
-              
-              if [ -n "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
-                echo "✓ Found artifact with ID: $ARTIFACT_ID"
-                
-                # Download the artifact using GitHub API
-                mkdir -p "/tmp/build_deps/${dep_name}"
-                DOWNLOAD_URL=$(echo "$ARTIFACTS_JSON" | jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url")
-                
-                echo "Downloading artifact from: $DOWNLOAD_URL"
-                curl -L -H "Authorization: token ${{ github.token }}" \
-                  -o "/tmp/build_deps/${dep_name}.zip" "$DOWNLOAD_URL"
-                
-                # Extract the artifact
-                unzip -q "/tmp/build_deps/${dep_name}.zip" -d "/tmp/build_deps/${dep_name}"
-                rm "/tmp/build_deps/${dep_name}.zip"
+              # Try to download using actions/download-artifact which handles GitHub API efficiently
+              if gh run download ${{ github.run_id }} -n "$ARTIFACT_NAME" -D "/tmp/build_deps/${dep_name}" 2>/dev/null; then
+                echo "✓ Successfully downloaded artifact $ARTIFACT_NAME"
                 
                 # Install the wheel
                 if ls /tmp/build_deps/${dep_name}/*.whl 1> /dev/null 2>&1; then
                   echo "Installing wheel(s) from $dep_name..."
                   python -m pip install /tmp/build_deps/${dep_name}/*.whl
                   echo "✓ Installed $dep_name successfully"
+                  break
                 else
                   echo "Warning: No wheel files found in artifact for $dep_name"
+                  break
                 fi
-                break
               else
-                if [ $ATTEMPT -eq 0 ]; then
-                  echo "Artifact not yet available, waiting for build to complete..."
+                if [ $ATTEMPT -eq 1 ]; then
+                  echo "Artifact not yet available, waiting for dependency build to complete..."
                 fi
-                ATTEMPT=$((ATTEMPT + 1))
+                
                 if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                  sleep 30
+                  echo "Waiting ${WAIT_TIME}s before retry..."
+                  sleep $WAIT_TIME
+                  # Exponential backoff up to 60 seconds
+                  WAIT_TIME=$((WAIT_TIME * 2))
+                  if [ $WAIT_TIME -gt 60 ]; then
+                    WAIT_TIME=60
+                  fi
                 else
                   echo "ERROR: Timeout waiting for dependency $dep_name"
                   echo "The build dependency '$dep_name' did not complete in time."
+                  echo "This may indicate the dependency build failed or is taking longer than expected."
                   exit 1
                 fi
               fi
