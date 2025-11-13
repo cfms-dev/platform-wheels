@@ -5,6 +5,12 @@ host_dependencies:
   - libopenblas-dev
   - liblapack-dev
 
+# Disable features that require runtime checks during cross-compilation
+cibw_environment:
+  NPY_DISABLE_BACKTRACE: "1"
+  NPY_USE_BLAS: "None"
+  NPY_USE_LAPACK: "None"
+
 # Create placeholder script that numpy's build expects and configure cross-compilation
 cibw_before_all: |
   # Create the missing cibw_before_build.sh script if numpy expects it
@@ -19,10 +25,20 @@ cibw_before_all: |
     chmod +x ./tools/wheels/cibw_before_build.sh
   fi
   
-  # Create Meson cross file to tell it we're cross-compiling and can't run binaries
+  # Create comprehensive Meson cross file for cross-compilation
   cat > /tmp/meson_cross_file.txt << 'MESON_EOF'
   [properties]
   needs_exe_wrapper = true
+  skip_sanity_check = true
+  
+  [built-in options]
+  # Disable features that aren't available on Android
+  
+  [host_machine]
+  system = 'android'
+  cpu_family = 'aarch64'
+  cpu = 'armv8'
+  endian = 'little'
   MESON_EOF
 
 # Configure meson-python to use the cross file
