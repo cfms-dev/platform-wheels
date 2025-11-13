@@ -20,7 +20,7 @@
 packages:
   # Simple package from PyPI
   - name: pyyaml
-  - name: PyYAML
+    alias: PyYAML
 
   # Package with version constraint
   - name: websockets
