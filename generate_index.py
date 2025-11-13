@@ -17,16 +17,31 @@ import re
 
 def get_package_name_from_wheel(wheel_filename):
     """
-    Extract the normalized package name from a wheel filename.
+    Extract the package name from a wheel filename, preserving case.
     Wheel format: {distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl
+    
+    Note: Package names preserve their original capitalization to allow
+    packages with the same name but different cases (e.g., 'PyYAML' vs 'pyyaml')
+    to be kept separate in the index.
     """
-    # Split on the first version-like pattern
-    parts = wheel_filename.split('-')
-    if len(parts) >= 2:
-        # Package name is everything before the version
-        # Version typically starts with a digit
-        package_name = parts[0]
-        return package_name.lower().replace('_', '-')
+    # Remove .whl extension
+    name_without_ext = wheel_filename.replace('.whl', '')
+    
+    # Split on hyphens
+    parts = name_without_ext.split('-')
+    
+    # Find the first part that looks like a version (starts with a digit)
+    # According to PEP 427, version is the second component and starts with a digit
+    for i, part in enumerate(parts):
+        if part and part[0].isdigit():
+            # Everything before this is the package name
+            package_name = '-'.join(parts[:i])
+            # Normalize underscores to hyphens but preserve case
+            return package_name.replace('_', '-')
+    
+    # Fallback: if no version found, assume first part is package name
+    if parts:
+        return parts[0].replace('_', '-')
     return None
 
 
