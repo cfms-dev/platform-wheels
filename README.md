@@ -121,6 +121,11 @@ packages:
   - name: numpy
     version: "==1.24.0"
 
+  # Package with alias (creates indexes for both names)
+  # Useful when the PyPI package name differs from the desired index name
+  - name: pyyaml
+    alias: PyYAML
+
   # Package with host dependencies and external patch URL
   - name: some-package
     host_dependencies:
@@ -150,6 +155,7 @@ packages:
 **Supported options:**
 - `name`: Package name (required)
 - `version`: Version constraint (optional, e.g., `"==1.0.0"`, `">=2.0.0"`)
+- `alias`: Alternative package name for the index (optional). When specified, creates indexes for both the `name` and `alias` with appropriately renamed wheel files
 - `source`: Source type (optional: `pypi`, `url`, `git`; default: `pypi`)
 - `url`: Custom URL for `url` or `git` sources (required if source is not `pypi`)
 - `host_dependencies`: System packages to install before building (optional)

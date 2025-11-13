@@ -13,6 +13,11 @@ packages:
   - name: pandas
     version: ">=2.0.0"
 
+  # Package with alias (creates indexes for both names)
+  # Useful when the PyPI package name differs from the desired index name
+  - name: pyyaml
+    alias: PyYAML
+
   # Package with host dependencies (libraries needed on the build system)
   - name: cffi
     host_dependencies:
