@@ -117,6 +117,56 @@ jobs:
           echo "Installing pip dependencies: ${{ join(matrix.package.pip_dependencies, ' ') }}"
           python -m pip install ${{ join(matrix.package.pip_dependencies, ' ') }}
 
+      - name: Wait for and install build dependencies
+        if: steps.check-skip.outputs.skip != 'true' && matrix.package.build_dependencies[0] != null
+        run: |
+          echo "Package has build dependencies: ${{ join(matrix.package.build_dependencies, ' ') }}"
+          BUILD_DEPS='${{ toJSON(matrix.package.build_dependencies) }}'
+          
+          # Parse build dependencies
+          echo "$BUILD_DEPS" | jq -r '.[]' | while read -r dep_name; do
+            echo "Waiting for dependency: $dep_name (platform: ${{ matrix.os }})"
+            
+            # Wait for the artifact to be available (polling approach)
+            MAX_ATTEMPTS=60  # 60 attempts * 30 seconds = 30 minutes max wait
+            ATTEMPT=0
+            ARTIFACT_NAME="cibw-wheels-${{ matrix.os }}-${dep_name}"
+            
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Checking for artifact $ARTIFACT_NAME..."
+              
+              # Try to download the artifact
+              # Note: actions/download-artifact@v4 will fail if artifact doesn't exist yet
+              if gh run download ${{ github.run_id }} -n "$ARTIFACT_NAME" -D "/tmp/build_deps/${dep_name}" 2>/dev/null; then
+                echo "✓ Successfully downloaded artifact for $dep_name"
+                
+                # Install the wheel
+                if ls /tmp/build_deps/${dep_name}/*.whl 1> /dev/null 2>&1; then
+                  echo "Installing wheel(s) from $dep_name..."
+                  python -m pip install /tmp/build_deps/${dep_name}/*.whl
+                  echo "✓ Installed $dep_name successfully"
+                fi
+                break
+              else
+                if [ $ATTEMPT -eq 0 ]; then
+                  echo "Artifact not yet available, waiting for build to complete..."
+                fi
+                ATTEMPT=$((ATTEMPT + 1))
+                if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                  sleep 30
+                else
+                  echo "ERROR: Timeout waiting for dependency $dep_name"
+                  echo "The build dependency '$dep_name' did not complete in time."
+                  exit 1
+                fi
+              fi
+            done
+          done
+          
+          echo "All build dependencies installed successfully"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Download package source
         if: steps.check-skip.outputs.skip != 'true'
         run: |
@@ -204,12 +254,23 @@ jobs:
           CIBW_ARCHS: ${{ matrix.archs }}
           CIBW_BUILD: cp314-*
           # Pass through environment variables needed by build scripts
-          CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE
-          CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE
+          CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE HOST_DEPENDENCIES
+          CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE HOST_DEPENDENCIES
+          # Set HOST_DEPENDENCIES for use in build scripts
+          HOST_DEPENDENCIES: ${{ join(matrix.package.host_dependencies, ' ') }}
           # Apply package-specific cibuildwheel environment variables if specified
+          # The setup script will be sourced to set library paths automatically
           CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
           # Override before_all if specified in recipe (empty string disables it)
-          CIBW_BEFORE_ALL: ${{ matrix.package.cibw_before_all }}
+          # If host dependencies exist and before_all is set, append the env setup script
+          CIBW_BEFORE_ALL: |
+            ${{ matrix.package.cibw_before_all }}
+            if [ -n "$HOST_DEPENDENCIES" ]; then
+              echo "Setting up cross-compilation environment for host dependencies..."
+              if [ -f "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh" ]; then
+                source "$GITHUB_WORKSPACE/scripts/setup_cross_compile_env.sh"
+              fi
+            fi
           # Override config_settings if specified in recipe
           CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
         with:
