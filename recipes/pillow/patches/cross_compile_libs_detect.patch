@@ -8,10 +8,12 @@
  import re
  import shutil
  import struct
-@@ -688,6 +689,51 @@
+@@ -688,8 +689,53 @@
              _add_directory(library_dirs, "/usr/local/lib")
              _add_directory(include_dirs, "/usr/local/include")
  
+-            _add_directory(library_dirs, "/usr/lib")
+-            _add_directory(include_dirs, "/usr/include")
 +            # For cross-compilation: Auto-detect cross-compiled libraries in /tmp
 +            # This handles zlib, libjpeg, and libtiff built by our build scripts
 +            is_cross_compiling = False
@@ -57,6 +59,6 @@
 +            # Only add host system paths when not cross-compiling
 +            # This prevents header mismatches when building for Android/iOS
 +            if not is_cross_compiling:
-             _add_directory(library_dirs, "/usr/lib")
-             _add_directory(include_dirs, "/usr/include")
++                _add_directory(library_dirs, "/usr/lib")
++                _add_directory(include_dirs, "/usr/include")
              # alpine, at least

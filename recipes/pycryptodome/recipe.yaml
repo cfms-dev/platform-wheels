@@ -7,7 +7,8 @@ cibw_environment:
   # Disable assembly optimizations that may not work on all architectures
   # This helps avoid build failures on ARM architectures during cross-compilation
   # Multiple flags are needed to ensure portable builds
-  CFLAGS: "-DUSE_PORTABLE_MEMCMP -DHAVE_POSIX_MEMALIGN=0"
+  # Note: For Android, CFLAGS should preserve any existing flags (like sysroot) set by cibuildwheel
+  CFLAGS: "${CFLAGS:+$CFLAGS }-DUSE_PORTABLE_MEMCMP -DHAVE_POSIX_MEMALIGN=0"
   # Also disable specific CPU features that might not be available
   PYCRYPTODOME_DISABLE_AESNI: "1"
   PYCRYPTODOME_DISABLE_SSE2: "1"
