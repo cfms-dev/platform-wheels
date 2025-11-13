@@ -48,6 +48,7 @@ def read_recipe(recipe_dir):
     package_info = {
         'spec': spec,
         'name': name,
+        'alias': pkg.get('alias', ''),
         'source': recipe.get('source', pkg.get('source', 'pypi')),
         'host_dependencies': recipe.get('host_dependencies', []),
         'pip_dependencies': recipe.get('pip_dependencies', []),
@@ -144,6 +145,7 @@ def read_yaml_config(config_file):
         package_info = {
             'spec': spec,
             'name': name,
+            'alias': pkg.get('alias', ''),
             'source': pkg.get('source', 'pypi'),
             'host_dependencies': pkg.get('host_dependencies', []),
             'pip_dependencies': pkg.get('pip_dependencies', []),
@@ -188,6 +190,7 @@ def read_txt_config(config_file):
             package_info = {
                 'spec': line,
                 'name': name,
+                'alias': '',
                 'source': 'pypi',
                 'host_dependencies': [],
                 'pip_dependencies': [],
