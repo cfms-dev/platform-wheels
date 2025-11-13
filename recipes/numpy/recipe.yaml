@@ -5,6 +5,6 @@ package:
 patches:
   - mobile-1.26.0.patch
 
-requirements:
+build_dependencies:
   host:
     - ninja
