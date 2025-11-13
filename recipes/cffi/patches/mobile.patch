@@ -1,0 +1,69 @@
+--- cffi-2.0.0-orig/setup.py	2025-11-13 02:41:10.420760367 +0000
++++ cffi-2.0.0/setup.py	2025-11-13 02:41:32.621982650 +0000
+@@ -9,10 +9,33 @@
+ 
+ sources = ['src/c/_cffi_backend.c']
+ libraries = ['ffi']
+-include_dirs = ['/usr/include/ffi',
+-                '/usr/include/libffi']    # may be changed by pkg-config
+-define_macros = [('FFI_BUILDING', '1')]   # for linking with libffi static library
++
++# For cross-compilation, use environment variables or search for cross-compiled libffi
++include_dirs = []
+ library_dirs = []
++
++# Check for explicit environment variables first
++if os.environ.get('FFI_INCLUDE_DIR'):
++    include_dirs.append(os.environ['FFI_INCLUDE_DIR'])
++    print(f"Using FFI_INCLUDE_DIR: {os.environ['FFI_INCLUDE_DIR']}")
++if os.environ.get('FFI_LIB_DIR'):
++    library_dirs.append(os.environ['FFI_LIB_DIR'])
++    print(f"Using FFI_LIB_DIR: {os.environ['FFI_LIB_DIR']}")
++
++# If not set, try to find cross-compiled libffi in /tmp
++if not include_dirs:
++    import glob
++    libffi_dirs = glob.glob('/tmp/libffi-install-*/include')
++    if libffi_dirs:
++        include_dirs.append(libffi_dirs[0])
++        print(f"Found libffi include dir: {libffi_dirs[0]}")
++        # Also set library dir
++        lib_dir = libffi_dirs[0].replace('/include', '/lib')
++        if os.path.exists(lib_dir):
++            library_dirs.append(lib_dir)
++            print(f"Found libffi lib dir: {lib_dir}")
++
++define_macros = [('FFI_BUILDING', '1')]   # for linking with libffi static library
+ extra_compile_args = []
+ extra_link_args = []
+ 
+@@ -150,7 +173,7 @@
+         sources.extend(os.path.join(COMPILE_LIBFFI, filename)
+                     for filename in _filenames)
+ else:
+-    use_pkg_config()
++    pass  # Don't use pkg-config for cross-compilation
+     ask_supports_thread()
+     ask_supports_sync_synchronize()
+ 
+--- cffi-2.0.0-orig/src/c/malloc_closure.h	2025-11-13 02:41:10.421760377 +0000
++++ cffi-2.0.0/src/c/malloc_closure.h	2025-11-13 02:41:46.452116936 +0000
+@@ -42,6 +42,9 @@
+         return 0;
+     ret = 0;
+ 
++
++    /* Chaquopy: getline requires API level 18, but PaX isn't used by Android anyway. */
++    #if __ANDROID_API__ >= 18
+     while (getline (&buf, &len, f) != -1)
+         if (!strncmp (buf, "PaX:", 4))
+             {
+@@ -51,6 +54,8 @@
+                 break;
+             }
+     free (buf);
++    #endif
++
+     fclose (f);
+     return ret;
+ }

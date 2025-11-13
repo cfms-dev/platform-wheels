@@ -1,0 +1,24 @@
+# Recipe for pillow package
+package:
+  name: pillow
+
+# Pillow requires zlib for PNG support
+host_dependencies:
+  - zlib1g-dev
+
+# Build zlib for the target architecture before building pillow
+# This script downloads, cross-compiles, and installs zlib for Android/iOS
+cibw_before_all: bash $GITHUB_WORKSPACE/recipes/pillow/build_zlib.sh
+
+# Override cibuildwheel config settings
+cibw_config_settings: ""  # Disable config settings that expect vendored libraries
+
+# Environment variables for cross-compilation
+cibw_environment:
+  # Disable pkg-config to avoid finding host libraries
+  PKG_CONFIG: ""
+
+# Patch to auto-detect cross-compiled zlib (similar to cffi's approach)
+patches:
+  - patches/zlib_detect.patch
+

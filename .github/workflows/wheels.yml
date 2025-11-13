@@ -21,18 +21,30 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - name: Read packages from file
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Install PyYAML
+        run: pip install pyyaml
+      
+      - name: Read packages from configuration
         id: set-packages
         run: |
-          # Read non-empty, non-comment lines from packages.txt
-          packages=$(grep -v '^#' packages.txt | grep -v '^[[:space:]]*$' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          # Use new read_packages.py script that supports both YAML and txt formats
+          packages=$(python read_packages.py)
           echo "packages=$packages" >> $GITHUB_OUTPUT
-          echo "Packages to build: $packages"
+          echo "Packages to build:"
+          echo "$packages" | jq -r '.[] | "  - \(.spec) [\(.source)]"'
 
   build_wheels:
-    name: Build ${{ matrix.package }} for ${{ matrix.os }}
+    name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
     needs: read_packages
     runs-on: ${{ matrix.runs-on }}
+    # Skip if package has this platform in skip_platforms list
+    if: |
+      !contains(matrix.package.skip_platforms, matrix.platform)
     permissions:
       contents: read
     strategy:
@@ -62,18 +74,112 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Install host dependencies (Ubuntu)
+        if: runner.os == 'Linux' && matrix.package.host_dependencies[0] != null
+        run: |
+          echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
+          sudo apt-get update
+          sudo apt-get install -y ${{ join(matrix.package.host_dependencies, ' ') }}
+
+      - name: Install host dependencies (macOS)
+        if: runner.os == 'macOS' && matrix.package.host_dependencies[0] != null
+        run: |
+          echo "Installing host dependencies: ${{ join(matrix.package.host_dependencies, ' ') }}"
+          # Map common Linux package names to macOS equivalents
+          deps="${{ join(matrix.package.host_dependencies, ' ') }}"
+          deps="${deps//libffi-dev/libffi}"
+          deps="${deps//libssl-dev/openssl}"
+          deps="${deps//libjpeg-dev/jpeg}"
+          deps="${deps//libpng-dev/libpng}"
+          deps="${deps//libtiff-dev/libtiff}"
+          deps="${deps//libfreetype6-dev/freetype}"
+          deps="${deps//liblcms2-dev/little-cms2}"
+          deps="${deps//libwebp-dev/webp}"
+          brew install $deps || true
+
+      - name: Install pip dependencies
+        if: matrix.package.pip_dependencies[0] != null
+        run: |
+          echo "Installing pip dependencies: ${{ join(matrix.package.pip_dependencies, ' ') }}"
+          python -m pip install ${{ join(matrix.package.pip_dependencies, ' ') }}
+
       - name: Download package source
         run: |
           python -m pip install --upgrade pip
-          pip download --no-binary :all: --no-deps "${{ matrix.package }}"
-          # Extract the downloaded package
-          for file in *.tar.gz; do [ -f "$file" ] && tar -xzf "$file" && rm "$file"; done
-          for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
-          for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
-          # Find the extracted directory
-          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" | tail -n 1)
+          # Check if custom URL is specified
+          if [ "${{ matrix.package.source }}" = "url" ] && [ -n "${{ matrix.package.url }}" ]; then
+            echo "Downloading from custom URL: ${{ matrix.package.url }}"
+            curl -L -o package_source "${{ matrix.package.url }}"
+            # Determine file type and extract
+            file package_source
+            if file package_source | grep -q "gzip"; then
+              mv package_source package.tar.gz
+              tar -xzf package.tar.gz && rm package.tar.gz
+            elif file package_source | grep -q "Zip"; then
+              mv package_source package.zip
+              unzip package.zip && rm package.zip
+            elif file package_source | grep -q "tar"; then
+              mv package_source package.tar
+              tar -xf package.tar && rm package.tar
+            else
+              echo "Unknown file type, trying as tarball"
+              mv package_source package.tar.gz
+              tar -xzf package.tar.gz && rm package.tar.gz
+            fi
+          elif [ "${{ matrix.package.source }}" = "git" ] && [ -n "${{ matrix.package.url }}" ]; then
+            echo "Cloning from git: ${{ matrix.package.url }}"
+            git clone ${{ matrix.package.url }} package_dir
+          else
+            echo "Downloading from PyPI: ${{ matrix.package.spec }}"
+            pip download --no-binary :all: --no-deps "${{ matrix.package.spec }}"
+            # Extract the downloaded package
+            for file in *.tar.gz; do [ -f "$file" ] && tar -xzf "$file" && rm "$file"; done
+            for file in *.zip; do [ -f "$file" ] && unzip "$file" && rm "$file"; done
+            for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
+          fi
+          # Find the extracted directory (exclude common repo directories)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "." | head -n 1)
           echo "PACKAGE_DIR=$PACKAGE_DIR" >> $GITHUB_ENV
           echo "Building package in: $PACKAGE_DIR"
+
+      - name: Apply patches
+        if: toJSON(matrix.package.patches) != '[]'
+        run: |
+          echo "Applying patches to package in: ${{ env.PACKAGE_DIR }}"
+          cd "${{ env.PACKAGE_DIR }}"
+          # Apply each patch
+          PATCH_INDEX=0
+          PATCHES='${{ toJSON(matrix.package.patches) }}'
+          echo "$PATCHES" | jq -r '.[]' | while read -r patch_path; do
+            PATCH_INDEX=$((PATCH_INDEX + 1))
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              # Download patch from URL
+              echo "Downloading patch from URL: $patch_path"
+              curl -L -o "/tmp/patch_${PATCH_INDEX}.patch" "$patch_path"
+              PATCH_FILE="/tmp/patch_${PATCH_INDEX}.patch"
+            else
+              # Use local patch file
+              echo "Using local patch: $patch_path"
+              # Convert to absolute path from repository root
+              if [[ ! "$patch_path" =~ ^/ ]]; then
+                PATCH_FILE="${GITHUB_WORKSPACE}/$patch_path"
+              else
+                PATCH_FILE="$patch_path"
+              fi
+            fi
+            
+            echo "Applying patch ${PATCH_INDEX}..."
+            patch -p1 < "$PATCH_FILE" || {
+              echo "Failed to apply patch with -p1, trying -p0"
+              patch -p0 < "$PATCH_FILE"
+            }
+            
+            # Clean up if it was a downloaded patch
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              rm "/tmp/patch_${PATCH_INDEX}.patch"
+            fi
+          done
+          echo "All patches applied successfully"
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
@@ -81,20 +187,30 @@ jobs:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
           CIBW_BUILD: cp314-*
+          # Pass through environment variables needed by build scripts
+          CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE
+          CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE
+          # Apply package-specific cibuildwheel environment variables if specified
+          CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
+          # Override before_all if specified in recipe (empty string disables it)
+          CIBW_BEFORE_ALL: ${{ matrix.package.cibw_before_all }}
+          # Override config_settings if specified in recipe
+          CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
         with:
           package-dir: ${{ env.PACKAGE_DIR }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ matrix.package }}
+          name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
           path: ./wheelhouse/*.whl
 
   deploy_index:
     name: Deploy wheel index to GitHub Pages
     needs: build_wheels
     runs-on: ubuntu-latest
-    # Only deploy on push to main or release
-    if: github.event_name == 'push' || github.event_name == 'release'
+    # Deploy even if some builds fail (but not if cancelled)
+    # This allows successful wheels to be published immediately
+    if: always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'release')
     permissions:
       contents: read
       pages: write
