@@ -18,3 +18,7 @@ cibw_environment:
   # Disable pkg-config to avoid finding host libraries
   PKG_CONFIG: ""
 
+# Patch to auto-detect cross-compiled zlib (similar to cffi's approach)
+patches:
+  - patches/zlib_detect.patch
+
