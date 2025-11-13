@@ -283,7 +283,7 @@ jobs:
         if: steps.check-skip.outputs.skip != 'true'
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
-          path: ./wheelhouse/*.whl
+          path: ${{ env.PACKAGE_DIR }}/wheelhouse/*.whl
 
   # Build packages with no dependencies and not depended upon by others
   build_independent_packages:
@@ -509,7 +509,7 @@ jobs:
         if: steps.check-skip.outputs.skip != 'true'
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
-          path: ./wheelhouse/*.whl
+          path: ${{ env.PACKAGE_DIR }}/wheelhouse/*.whl
 
   # Build packages that have dependencies on other packages
   build_dependent_packages:
@@ -756,7 +756,7 @@ jobs:
         if: steps.check-skip.outputs.skip != 'true'
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
-          path: ./wheelhouse/*.whl
+          path: ${{ env.PACKAGE_DIR }}/wheelhouse/*.whl
 
   deploy_index:
     name: Deploy wheel index to GitHub Pages
