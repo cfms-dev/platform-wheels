@@ -10,8 +10,37 @@ This repository provides an automated system for building Python wheels for mult
 - Easy package configuration via `packages.txt`
 - Dynamic package list reading from configuration file
 - Separate wheels for each package and platform combination
+- **Automatic deployment to GitHub Pages as a PyPI-like index**
 
 ## Usage
+
+### Installing Wheels
+
+After wheels are built and deployed, you can install them using pip with the extra index URL:
+
+```bash
+pip install --extra-index-url https://cfms-dev.github.io/platform-wheels/ <package-name>
+```
+
+For example:
+```bash
+pip install --extra-index-url https://cfms-dev.github.io/platform-wheels/ pyyaml
+```
+
+Or you can configure it in your `pip.conf` or `requirements.txt`:
+
+**pip.conf:**
+```ini
+[global]
+extra-index-url = https://cfms-dev.github.io/platform-wheels/
+```
+
+**requirements.txt:**
+```
+--extra-index-url https://cfms-dev.github.io/platform-wheels/
+pyyaml
+requests
+```
 
 ### Adding Packages
 
@@ -44,11 +73,14 @@ The workflow can be triggered in multiple ways:
 
 ### Built Wheels
 
-After a successful build, wheel artifacts are available in:
-- GitHub Actions artifacts (for manual/PR/push triggers)
-- Release assets (for release triggers)
+After a successful build:
+- **GitHub Actions artifacts**: Available for all workflow runs
+- **GitHub Pages**: Deployed automatically on push to main or release (accessible via pip)
+- **Release assets**: Attached to releases when triggered by a release event
 
 Each artifact is named: `cibw-wheels-{platform}-{package}`
+
+The wheel index is available at: https://cfms-dev.github.io/platform-wheels/
 
 ## Platforms
 
@@ -81,6 +113,17 @@ For advanced configuration, you can modify the `.github/workflows/wheels.yml` fi
    - Extracts it
    - Uses cibuildwheel to build the wheel for the target platform
    - Uploads the built wheel as an artifact
+4. The `deploy_index` job (on push to main or release):
+   - Downloads all built wheel artifacts
+   - Generates a PyPI-like HTML index structure
+   - Deploys the index to GitHub Pages
+
+### PyPI Index Structure
+
+The generated index follows the simple repository API format used by pip:
+- Root page (`/`) lists all available packages
+- Each package has its own page (`/<package-name>/`) listing all available wheels
+- Wheels include SHA256 hashes for verification
 
 ## Requirements
 
