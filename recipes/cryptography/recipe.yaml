@@ -1,0 +1,9 @@
+# Recipe for cryptography package
+package:
+  name: cryptography
+
+host_dependencies:
+  - libssl-dev
+  - libffi-dev
+  - cargo
+  - rustc

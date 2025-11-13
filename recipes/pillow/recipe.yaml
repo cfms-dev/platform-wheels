@@ -1,0 +1,11 @@
+# Recipe for pillow package
+package:
+  name: pillow
+
+host_dependencies:
+  - libjpeg-dev
+  - libpng-dev
+  - libtiff-dev
+  - libfreetype6-dev
+  - liblcms2-dev
+  - libwebp-dev

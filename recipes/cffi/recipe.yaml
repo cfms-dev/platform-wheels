@@ -1,0 +1,10 @@
+# Recipe for cffi package
+package:
+  name: cffi
+  # version: ""  # Optional: leave empty to use latest
+
+host_dependencies:
+  - libffi-dev
+
+patches:
+  - patches/mobile.patch

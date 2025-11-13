@@ -7,10 +7,11 @@ This repository provides an automated system for building Python wheels for mult
 - Automated wheel building for Android and iOS platforms
 - **Python 3.14 support** (officially released October 7th, 2025)
 - Android builds for **arm64_v8a** and **x86_64** architectures (as specified)
-- Easy package configuration via `packages.txt` or advanced `packages.yaml`
+- **Recipe-based configuration** - Organize packages with patches in `recipes/` directory
+- Easy package configuration via `packages.txt`, `packages.yaml`, or `recipes/`
 - **Host dependency management** - Install system libraries needed by packages (e.g., libffi for cffi)
 - **Custom source support** - Build from custom URLs or Git repositories
-- **Patch support** - Apply patches to source code before building (e.g., mobile platform fixes)
+- **Patch support** - Apply patches to source code before building (local files or URLs)
 - Dynamic package list reading from configuration file
 - Separate wheels for each package and platform combination
 - **Automatic deployment to GitHub Pages as a PyPI-like index**
@@ -48,7 +49,42 @@ requests
 
 ### Adding Packages
 
-You can configure packages in two ways:
+You can configure packages in three ways:
+
+#### Recipe-based Configuration (recipes/)
+
+**Recommended** for packages requiring special configuration. Create a directory under `recipes/` for each package:
+
+```
+recipes/
+├── cffi/
+│   ├── recipe.yaml
+│   └── patches/
+│       └── mobile.patch
+└── cryptography/
+    └── recipe.yaml
+```
+
+Example `recipes/cffi/recipe.yaml`:
+
+```yaml
+package:
+  name: cffi
+
+host_dependencies:
+  - libffi-dev
+
+patches:
+  - patches/mobile.patch  # Local patch file
+```
+
+**Benefits:**
+- Keeps patches organized with their packages
+- Easy to maintain and version control
+- Clear separation of concerns
+- Patches stored locally in the repository
+
+See `recipes/README.md` for detailed documentation.
 
 #### Simple Configuration (packages.txt)
 
@@ -72,7 +108,9 @@ See `packages.txt.example` for more examples.
 
 #### Advanced Configuration (packages.yaml)
 
-For advanced features like host dependencies and custom sources, create a `packages.yaml` file:
+For centralized configuration of multiple packages, create a `packages.yaml` file:
+
+**Note:** Packages defined in `recipes/` take priority over `packages.yaml`.
 
 ```yaml
 packages:
@@ -83,12 +121,12 @@ packages:
   - name: numpy
     version: "==1.24.0"
 
-  # Package with host dependencies (e.g., cffi needs libffi)
-  - name: cffi
+  # Package with host dependencies and external patch URL
+  - name: some-package
     host_dependencies:
       - libffi-dev
     patches:
-      - https://github.com/flet-dev/mobile-forge/raw/python3.12/recipes/cffi/patches/mobile.patch
+      - https://example.com/patches/fix.patch
 
   # Package with multiple host dependencies
   - name: cryptography
@@ -118,9 +156,12 @@ packages:
 - `pip_dependencies`: Python packages needed for building (optional)
 - `patches`: List of patch file URLs to apply to the source code (optional)
 
-**Note:** If `packages.yaml` exists, it will be used. Otherwise, the system falls back to `packages.txt` for backward compatibility.
+**Configuration Priority:**
+1. `recipes/` directory (highest priority - recommended for packages with patches)
+2. `packages.yaml` (for centralized configuration)
+3. `packages.txt` (simple list, backward compatibility)
 
-See `packages.yaml.example` for more examples.
+See `packages.yaml.example` and `recipes/README.md` for more examples.
 
 ### Triggering Builds
 

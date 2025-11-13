@@ -144,19 +144,37 @@ jobs:
         run: |
           echo "Applying patches to package in: ${{ env.PACKAGE_DIR }}"
           cd "${{ env.PACKAGE_DIR }}"
-          # Download and apply each patch
+          # Apply each patch
           PATCH_INDEX=0
           PATCHES='${{ toJSON(matrix.package.patches) }}'
-          echo "$PATCHES" | jq -r '.[]' | while read -r patch_url; do
-            echo "Downloading patch: $patch_url"
+          echo "$PATCHES" | jq -r '.[]' | while read -r patch_path; do
             PATCH_INDEX=$((PATCH_INDEX + 1))
-            curl -L -o "/tmp/patch_${PATCH_INDEX}.patch" "$patch_url"
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              # Download patch from URL
+              echo "Downloading patch from URL: $patch_path"
+              curl -L -o "/tmp/patch_${PATCH_INDEX}.patch" "$patch_path"
+              PATCH_FILE="/tmp/patch_${PATCH_INDEX}.patch"
+            else
+              # Use local patch file
+              echo "Using local patch: $patch_path"
+              # Convert to absolute path from repository root
+              if [[ ! "$patch_path" =~ ^/ ]]; then
+                PATCH_FILE="${GITHUB_WORKSPACE}/$patch_path"
+              else
+                PATCH_FILE="$patch_path"
+              fi
+            fi
+            
             echo "Applying patch ${PATCH_INDEX}..."
-            patch -p1 < "/tmp/patch_${PATCH_INDEX}.patch" || {
+            patch -p1 < "$PATCH_FILE" || {
               echo "Failed to apply patch with -p1, trying -p0"
-              patch -p0 < "/tmp/patch_${PATCH_INDEX}.patch"
+              patch -p0 < "$PATCH_FILE"
             }
-            rm "/tmp/patch_${PATCH_INDEX}.patch"
+            
+            # Clean up if it was a downloaded patch
+            if [[ "$patch_path" =~ ^https?:// ]]; then
+              rm "/tmp/patch_${PATCH_INDEX}.patch"
+            fi
           done
           echo "All patches applied successfully"
 
