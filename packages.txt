@@ -8,3 +8,17 @@
 # Add your packages below (uncomment to use):
 # requests
 pyyaml
+cffi
+websockets
+numpy
+pycryptodome
+cryptography
+pandas
+pillow
+flet-libcpp-shared
+flet-libpng
+flet-libjpeg
+flet-libxml2
+flet-libxslt
+flet-libcrc32c
+flet-libsodium
