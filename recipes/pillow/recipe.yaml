@@ -2,10 +2,24 @@
 package:
   name: pillow
 
-host_dependencies:
-  - libjpeg-dev
-  - libpng-dev
-  - libtiff-dev
-  - libfreetype6-dev
-  - liblcms2-dev
-  - libwebp-dev
+# Note: Pillow requires special build configuration for cross-compilation
+# The pillow package on PyPI doesn't include the .github/workflows/wheels-dependencies.sh
+# script that cibuildwheel expects. For Android/iOS builds, use the source from git
+# or disable the before_all/before_build scripts.
+
+# For now, keeping this simple without host dependencies as they don't work
+# for Android/iOS cross-compilation without additional setup.
+# Users should build pillow from a git source with proper mobile patches.
+
+# Commenting out host dependencies as they're for x86_64 and won't help cross-compilation
+# host_dependencies:
+#   - libjpeg-dev
+#   - libpng-dev  
+#   - libtiff-dev
+#   - libfreetype6-dev
+#   - liblcms2-dev
+#   - libwebp-dev
+
+# Override cibuildwheel config to skip before_all script that doesn't exist in PyPI package
+cibw_before_all: ""  # Disable before_all script
+cibw_config_settings: ""  # Disable config settings that expect vendored libraries

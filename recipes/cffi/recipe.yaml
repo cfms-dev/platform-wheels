@@ -6,5 +6,10 @@ package:
 host_dependencies:
   - libffi-dev
 
+# CIBW environment variables to help with cross-compilation
+# For Android/iOS, we need to avoid system pkg-config and use patches
+cibw_environment:
+  PKG_CONFIG: ""  # Disable pkg-config to avoid finding host libraries
+  
 patches:
-  # - patches/mobile.patch
+  - patches/mobile.patch  # Disables pkg-config and system includes for cross-compilation

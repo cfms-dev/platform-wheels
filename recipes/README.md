@@ -46,6 +46,17 @@ pip_dependencies:
 patches:
   - patches/fix-build.patch  # Local patch file (relative to recipe directory)
   - https://example.com/another.patch  # External patch URL
+
+# Optional: cibuildwheel environment variables (for cross-compilation)
+cibw_environment:
+  PKG_CONFIG: ""  # Disable pkg-config
+  CUSTOM_VAR: "value"
+
+# Optional: Override cibuildwheel before_all script (empty string disables it)
+cibw_before_all: ""  # Disable before_all script
+
+# Optional: Override cibuildwheel config_settings
+cibw_config_settings: "option1=value1 option2=value2"
 ```
 
 ## Local Patches
@@ -109,6 +120,60 @@ url: https://example.com/custom-lib-1.0.0.tar.gz
 patches:
   - patches/fix-compilation.patch
 ```
+
+### Package with Cross-Compilation Support (cffi example)
+
+```yaml
+# recipes/cffi/recipe.yaml
+package:
+  name: cffi
+
+host_dependencies:
+  - libffi-dev
+
+# Disable pkg-config for Android/iOS cross-compilation
+cibw_environment:
+  PKG_CONFIG: ""
+
+patches:
+  - patches/mobile.patch  # Patch that disables system include dirs
+```
+
+### Package that Overrides cibuildwheel Config (pillow example)
+
+```yaml
+# recipes/pillow/recipe.yaml
+package:
+  name: pillow
+
+# Disable before_all script that doesn't exist in PyPI sdist
+cibw_before_all: ""
+
+# Disable config settings that expect vendored libraries
+cibw_config_settings: ""
+```
+
+## Cross-Compilation Notes
+
+When building for Android/iOS:
+
+1. **Host dependencies** installed via `apt-get` (Linux) or `brew` (macOS) provide libraries for the **build host** architecture (x86_64), not the **target** architecture (ARM64).
+
+2. **Patches are essential** for packages that use pkg-config or system headers. The patch should:
+   - Disable pkg-config detection
+   - Remove hardcoded system include directories
+   - Allow the cross-compiler toolchain to find headers
+
+3. **cibuildwheel environment overrides** help control the build:
+   - `cibw_environment`: Set environment variables (e.g., disable PKG_CONFIG)
+   - `cibw_before_all`: Override or disable before_all scripts
+   - `cibw_config_settings`: Control build-time configuration
+
+4. **Example: cffi for Android/iOS**
+   - Requires libffi (Android NDK provides it)
+   - Needs patch to disable pkg-config and system includes
+   - Sets `PKG_CONFIG=""` to prevent finding host libraries
+   - The mobile.patch (from flet-dev/mobile-forge) handles setup.py changes
 
 ## Priority
 

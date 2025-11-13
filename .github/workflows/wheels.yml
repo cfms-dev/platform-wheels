@@ -184,6 +184,12 @@ jobs:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
           CIBW_BUILD: cp314-*
+          # Apply package-specific cibuildwheel environment variables if specified
+          CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
+          # Override before_all if specified in recipe (empty string disables it)
+          CIBW_BEFORE_ALL: ${{ matrix.package.cibw_before_all }}
+          # Override config_settings if specified in recipe
+          CIBW_CONFIG_SETTINGS: ${{ matrix.package.cibw_config_settings }}
         with:
           package-dir: ${{ env.PACKAGE_DIR }}
 

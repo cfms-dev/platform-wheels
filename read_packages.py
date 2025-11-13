@@ -52,7 +52,18 @@ def read_recipe(recipe_dir):
         'host_dependencies': recipe.get('host_dependencies', []),
         'pip_dependencies': recipe.get('pip_dependencies', []),
         'patches': [],
+        'cibw_environment': '',  # Will be formatted as CIBW_ENVIRONMENT string
+        'cibw_before_all': recipe.get('cibw_before_all', ''),
+        'cibw_config_settings': recipe.get('cibw_config_settings', ''),
     }
+    
+    # Convert cibw_environment dict to CIBW_ENVIRONMENT string format
+    if 'cibw_environment' in recipe and recipe['cibw_environment']:
+        env_dict = recipe['cibw_environment']
+        if isinstance(env_dict, dict):
+            # Format as VAR1=val1 VAR2=val2
+            env_pairs = [f'{k}={v}' for k, v in env_dict.items()]
+            package_info['cibw_environment'] = ' '.join(env_pairs)
     
     # Add URL if specified
     if 'url' in recipe:
@@ -134,7 +145,18 @@ def read_yaml_config(config_file):
             'host_dependencies': pkg.get('host_dependencies', []),
             'pip_dependencies': pkg.get('pip_dependencies', []),
             'patches': pkg.get('patches', []),
+            'cibw_environment': '',
+            'cibw_before_all': pkg.get('cibw_before_all', ''),
+            'cibw_config_settings': pkg.get('cibw_config_settings', ''),
         }
+        
+        # Convert cibw_environment dict to CIBW_ENVIRONMENT string format
+        if 'cibw_environment' in pkg and pkg['cibw_environment']:
+            env_dict = pkg['cibw_environment']
+            if isinstance(env_dict, dict):
+                # Format as VAR1=val1 VAR2=val2
+                env_pairs = [f'{k}={v}' for k, v in env_dict.items()]
+                package_info['cibw_environment'] = ' '.join(env_pairs)
         
         # Add URL if specified
         if 'url' in pkg:
@@ -167,6 +189,9 @@ def read_txt_config(config_file):
                 'host_dependencies': [],
                 'pip_dependencies': [],
                 'patches': [],
+                'cibw_environment': '',
+                'cibw_before_all': '',
+                'cibw_config_settings': '',
             }
             
             packages_data.append(package_info)
