@@ -71,7 +71,7 @@ def read_recipe(recipe_dir):
     elif 'url' in pkg:
         package_info['url'] = pkg['url']
     
-    # Handle patches - convert relative paths to absolute from recipe dir
+    # Handle patches - convert relative paths to be relative to repository root
     patches = recipe.get('patches', [])
     # Handle case where patches key exists but is None (e.g., all patches commented out)
     if patches is None:
@@ -84,8 +84,10 @@ def read_recipe(recipe_dir):
             # Local patch file relative to recipe directory
             patch_path = recipe_dir / patch
             if patch_path.exists():
-                # Convert to absolute path for workflow
-                package_info['patches'].append(str(patch_path.resolve()))
+                # Convert to path relative to repository root for $GITHUB_WORKSPACE
+                # This ensures it works on both Linux and macOS runners
+                relative_to_repo = os.path.relpath(patch_path, Path.cwd())
+                package_info['patches'].append(relative_to_repo)
             else:
                 print(f"Warning: Patch file not found: {patch_path}", file=sys.stderr)
     
