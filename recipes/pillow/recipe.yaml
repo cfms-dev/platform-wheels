@@ -2,13 +2,16 @@
 package:
   name: pillow
 
-# Pillow requires zlib for PNG support
+# Pillow requires zlib for PNG support, libjpeg for JPEG support, and libtiff for TIFF support
 host_dependencies:
   - zlib1g-dev
 
-# Build zlib for the target architecture before building pillow
-# This script downloads, cross-compiles, and installs zlib for Android/iOS
-cibw_before_all: bash $GITHUB_WORKSPACE/recipes/pillow/build_zlib.sh
+# Build zlib, libjpeg, and libtiff for the target architecture before building pillow
+# These scripts download, cross-compile, and install the libraries for Android/iOS
+cibw_before_all: |
+  bash $GITHUB_WORKSPACE/recipes/pillow/build_zlib.sh
+  bash $GITHUB_WORKSPACE/recipes/pillow/build_libjpeg.sh
+  bash $GITHUB_WORKSPACE/recipes/pillow/build_libtiff.sh
 
 # Override cibuildwheel config settings
 cibw_config_settings: ""  # Disable config settings that expect vendored libraries
@@ -18,7 +21,7 @@ cibw_environment:
   # Disable pkg-config to avoid finding host libraries
   PKG_CONFIG: ""
 
-# Patch to auto-detect cross-compiled zlib (similar to cffi's approach)
+# Patch to auto-detect cross-compiled libraries (zlib, libjpeg, libtiff)
 patches:
-  - patches/zlib_detect.patch
+  - patches/cross_compile_libs_detect.patch
 
