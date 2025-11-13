@@ -47,10 +47,9 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      # Add the following for Android only:
-      CIBW_BUILD_FRONTEND: |
-        ${{ (matrix.platform == 'android') && 'build' || '' }}
+    # env:
+    #   # Add the following for Android only:
+    #   CIBW_BUILD_FRONTEND: ${{ matrix.platform == 'android' && 'build' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -289,7 +288,7 @@ jobs:
 
       - name: Build wheels
         if: steps.check-skip.outputs.skip != 'true'
-        uses: pypa/cibuildwheel@v3.2.1
+        uses: pypa/cibuildwheel@v3.3.0
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
