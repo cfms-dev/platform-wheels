@@ -55,6 +55,7 @@ def read_recipe(recipe_dir):
         'cibw_environment': '',  # Will be formatted as CIBW_ENVIRONMENT string
         'cibw_before_all': recipe.get('cibw_before_all', ''),
         'cibw_config_settings': recipe.get('cibw_config_settings', ''),
+        'skip_platforms': recipe.get('skip_platforms', []),
     }
     
     # Convert cibw_environment dict to CIBW_ENVIRONMENT string format

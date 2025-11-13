@@ -42,6 +42,9 @@ jobs:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }}
     needs: read_packages
     runs-on: ${{ matrix.runs-on }}
+    # Skip if package has this platform in skip_platforms list
+    if: |
+      !contains(matrix.package.skip_platforms, matrix.platform)
     permissions:
       contents: read
     strategy:
@@ -205,8 +208,9 @@ jobs:
     name: Deploy wheel index to GitHub Pages
     needs: build_wheels
     runs-on: ubuntu-latest
-    # Only deploy on push to main or release
-    if: github.event_name == 'push' || github.event_name == 'release'
+    # Deploy even if some builds fail (but not if cancelled)
+    # This allows successful wheels to be published immediately
+    if: always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'release')
     permissions:
       contents: read
       pages: write
