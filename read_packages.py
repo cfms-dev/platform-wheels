@@ -62,6 +62,9 @@ def read_recipe(recipe_dir):
     
     # Handle patches - convert relative paths to absolute from recipe dir
     patches = recipe.get('patches', [])
+    # Handle case where patches key exists but is None (e.g., all patches commented out)
+    if patches is None:
+        patches = []
     for patch in patches:
         if patch.startswith('http://') or patch.startswith('https://'):
             # External URL patch

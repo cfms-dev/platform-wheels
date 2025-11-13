@@ -140,7 +140,7 @@ jobs:
           echo "Building package in: $PACKAGE_DIR"
 
       - name: Apply patches
-        if: matrix.package.patches[0] != null
+        if: toJSON(matrix.package.patches) != '[]'
         run: |
           echo "Applying patches to package in: ${{ env.PACKAGE_DIR }}"
           cd "${{ env.PACKAGE_DIR }}"
