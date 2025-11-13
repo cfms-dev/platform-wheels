@@ -104,6 +104,16 @@ The workflow uses these cibuildwheel environment variables:
 
 For advanced configuration, you can modify the `.github/workflows/wheels.yml` file.
 
+### GitHub Pages Setup
+
+To enable wheel deployment, GitHub Pages must be configured in your repository:
+
+1. Go to **Settings** → **Pages**
+2. Under **Source**, select **GitHub Actions**
+3. The workflow will automatically deploy the wheel index on push to main or release
+
+The index will be available at: `https://<username>.github.io/<repository>/`
+
 ## How It Works
 
 1. The `read_packages` job reads the `packages.txt` file and parses the package list
