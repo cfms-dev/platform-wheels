@@ -528,8 +528,10 @@ jobs:
           name: cibw-wheels-${{ matrix.os }}-${{ matrix.package.name }}
           path: ./wheelhouse/*.whl
 
-  # Build Level 2 and 3 would follow the same pattern as Level 1
-  # For now, we'll add placeholders that can be expanded if needed
+  # Build Level 2 and 3: Additional dependency levels (expand if needed)
+  # These jobs follow the same pattern as Level 1
+  # They will only run if packages exist at these levels (checked by if condition)
+  # To expand: copy the build_level_1 steps and adjust the needs dependencies
   
   build_level_2:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }} (L2)
@@ -559,9 +561,8 @@ jobs:
             runs-on: macos-latest
             platform: ios
             archs: all
-    # Steps would be identical to level 1, downloading from levels 0-1
     steps:
-      - run: echo "Level 2 build would go here - same pattern as Level 1"
+      - run: echo "Level 2 placeholder - expand with build_level_1 steps if packages are added at this level"
 
   build_level_3:
     name: Build ${{ matrix.package.name }} for ${{ matrix.os }} (L3)
@@ -591,9 +592,8 @@ jobs:
             runs-on: macos-latest
             platform: ios
             archs: all
-    # Steps would be identical to level 1, downloading from levels 0-2
     steps:
-      - run: echo "Level 3 build would go here - same pattern as Level 1"
+      - run: echo "Level 3 placeholder - expand with build_level_1 steps if packages are added at this level"
 
   deploy_index:
     name: Deploy wheel index to GitHub Pages

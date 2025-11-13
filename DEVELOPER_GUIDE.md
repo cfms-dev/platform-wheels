@@ -45,26 +45,34 @@ packages:
 
 ### How It Works
 
-1. **Dependency Resolution**: When you run `read_packages.py`, it performs a topological sort on all packages based on their `build_dependencies`. This ensures packages are built in the correct order.
+1. **Dependency Resolution**: When you run `read_packages.py`, it performs a topological sort on all packages based on their `build_dependencies`. This ensures packages are built in the correct order and assigns each package a dependency level (0 = no dependencies, 1 = depends on level 0 packages, etc.).
 
-2. **Build Order**: Packages with no dependencies are built first, followed by packages that depend on them.
+2. **Build Order**: The workflow uses GitHub Actions' `needs` keyword to create a dependency chain:
+   - Level 0 packages (no dependencies) build first in the `build_level_0` job
+   - Level 1 packages build next in the `build_level_1` job, which depends on `build_level_0` via `needs`
+   - Level 2 and 3 jobs follow the same pattern if packages exist at those levels
+   - Packages within the same level build in parallel using matrix strategy
 
-3. **Waiting for Dependencies**: During the build process, if a package has build dependencies:
-   - The workflow waits for the dependency wheels to be uploaded as artifacts
-   - It polls the GitHub API every 30 seconds for up to 30 minutes
-   - Once available, it downloads and installs the dependency wheels
-   - Then proceeds with building the current package
+3. **Dependency Handling**: When a package has build dependencies:
+   - The job waits for previous level jobs to complete (enforced by `needs`)
+   - Once the previous level completes, artifacts are guaranteed to be available
+   - The workflow downloads dependency artifacts using `actions/download-artifact@v4`
+   - Dependency wheels are installed before building the current package
+   - No polling required - GitHub Actions handles job orchestration
 
 4. **Error Handling**: 
-   - Circular dependencies are detected and reported as errors
+   - Circular dependencies are detected during `read_packages.py` and reported as errors
    - Missing dependencies (not in the package list) generate warnings
-   - Timeout waiting for dependencies causes the build to fail
+   - If a dependency build fails, dependent builds are automatically skipped
+   - Clear visualization of dependency chain in GitHub Actions UI
 
 ### Important Notes
 
 - Build dependencies must be packages defined in the same workflow (recipes or packages.yaml)
 - For external Python dependencies from PyPI, use `pip_dependencies` instead
 - Build dependencies are resolved per platform (Android/iOS builds are independent)
+- The dependency level system supports up to 4 levels (0-3); expand if needed
+
 
 ## Host Dependencies
 
