@@ -87,7 +87,11 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     export CC="$TOOLCHAIN/bin/${HOST}${ANDROID_API_LEVEL}-clang"
     export AR="$TOOLCHAIN/bin/llvm-ar"
     export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
-    export CFLAGS="-fPIC"
+    
+    # Explicitly set sysroot to avoid using host system headers
+    SYSROOT="$TOOLCHAIN/sysroot"
+    export CFLAGS="--sysroot=$SYSROOT -fPIC"
+    export LDFLAGS="--sysroot=$SYSROOT"
     
     # Configure and build zlib
     INSTALL_DIR="/tmp/zlib-install-${ANDROID_ABI}"
