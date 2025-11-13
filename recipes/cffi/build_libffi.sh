@@ -89,6 +89,12 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
     export STRIP="$TOOLCHAIN/bin/llvm-strip"
     
+    # Set sysroot to use only NDK headers, not host system headers
+    SYSROOT="$TOOLCHAIN/sysroot"
+    export CFLAGS="--sysroot=$SYSROOT"
+    export CXXFLAGS="--sysroot=$SYSROOT"
+    export LDFLAGS="--sysroot=$SYSROOT"
+    
     # Set install prefix
     PREFIX="/tmp/libffi-install-${ANDROID_ABI}"
     

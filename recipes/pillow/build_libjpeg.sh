@@ -94,6 +94,12 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     export RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
     export STRIP="$TOOLCHAIN/bin/llvm-strip"
     
+    # Set sysroot to use only NDK headers, not host system headers
+    SYSROOT="$TOOLCHAIN/sysroot"
+    export CFLAGS="--sysroot=$SYSROOT"
+    export CXXFLAGS="--sysroot=$SYSROOT"
+    export LDFLAGS="--sysroot=$SYSROOT"
+    
     # Configure and build libjpeg-turbo using CMake
     INSTALL_DIR="/tmp/libjpeg-install-${ANDROID_ABI}"
     BUILD_DIR="build-${ANDROID_ABI}"
