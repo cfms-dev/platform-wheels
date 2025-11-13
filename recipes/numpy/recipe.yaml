@@ -27,13 +27,19 @@ cibw_before_all: |
   
   # Create comprehensive Meson cross file for cross-compilation
   cat > /tmp/meson_cross_file.txt << 'MESON_EOF'
+  [constants]
+  common_c_flags = ['-fPIC', '-D__MUSL__=1', '-I' + dist_root/'include', '-I' + dist_root/'include/lzma', '-I' + dist_root/'include/ncursesw', '-I' + dist_root/'include/readline', '-I' + dist_root/'ssl/include']
+  common_ld_flags = ['-fuse-ld=lld', '-L' + dist_root/'lib', '-L' + dist_root/'ssl/lib64', '-lpython3.14']
+
+  [built-in options]
+  c_args = common_c_flags
+  cpp_args = common_c_flags
+  c_link_args = common_ld_flags
+  cpp_link_args = common_ld_flags
+
   [properties]
   needs_exe_wrapper = true
   skip_sanity_check = true
-  
-  [built-in options]
-  c_args = ['-Wno-unknown-attributes', '-Wno-unused-value', '-Wno-ignored-attributes']
-  cpp_args = ['-Wno-unknown-attributes', '-Wno-unused-value', '-Wno-ignored-attributes']
   
   [host_machine]
   system = 'android'
