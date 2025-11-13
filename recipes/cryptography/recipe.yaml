@@ -2,11 +2,9 @@
 package:
   name: cryptography
 
-# Skip for mobile platforms due to Rust/maturin cross-compilation complexity
-# Maturin requires matching host/target Python interpreters and proper Rust toolchains
-# which is not feasible in the current cibuildwheel Android/iOS setup
+# Skip iOS due to Rust/maturin cross-compilation complexity with Xcode toolchain
+# Android builds are now supported with PYO3_CROSS=1 environment variable
 skip_platforms:
-  - android
   - ios
 
 host_dependencies:

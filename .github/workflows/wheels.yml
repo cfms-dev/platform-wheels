@@ -207,7 +207,8 @@ jobs:
           CIBW_ENVIRONMENT_PASS_LINUX: GITHUB_WORKSPACE
           CIBW_ENVIRONMENT_PASS_MACOS: GITHUB_WORKSPACE
           # Apply package-specific cibuildwheel environment variables if specified
-          CIBW_ENVIRONMENT: ${{ matrix.package.cibw_environment }}
+          # For Android builds, prepend PYO3_CROSS=1 for Rust/maturin cross-compilation support
+          CIBW_ENVIRONMENT: ${{ matrix.platform == 'android' && format('PYO3_CROSS=1 {0}', matrix.package.cibw_environment) || matrix.package.cibw_environment }}
           # Override before_all if specified in recipe (empty string disables it)
           CIBW_BEFORE_ALL: ${{ matrix.package.cibw_before_all }}
           # Override config_settings if specified in recipe
