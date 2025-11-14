@@ -12,11 +12,15 @@ pip_dependencies:
   - meson-python
   - build
 
+host_dependencies:
+  - python3-dev
+
 # Environment variables for the build
 # PKG_CONFIG="" prevents finding host system libraries during cross-compilation
 # This is critical for mobile cross-compilation to avoid linking against host libs
 cibw_environment:
-  PKG_CONFIG: ""
+    LDFLAGS: "-lm"
+#   PKG_CONFIG: ""
 
 # Build script to set up cross-compilation
 # For mobile platforms, we create a builddir and meson cross file
