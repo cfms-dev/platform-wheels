@@ -3,27 +3,40 @@ package:
   # version: ""  # Optional: leave empty to use latest
 
 # Pip dependencies needed for building numpy
-# Cython is required for building numpy's extension modules
-# meson-python is the build backend (numpy uses meson build system)
+# Based on void-linux and conda-forge configurations:
+# - Cython: Required for building numpy's extension modules
+# - meson-python: Build backend (numpy uses meson build system since 1.26+)
+# - build: PEP 517 build frontend (conda-forge uses python -m build)
 pip_dependencies:
   - Cython
   - meson-python
+  - build
 
 # Environment variables for the build
 # PKG_CONFIG="" prevents finding host system libraries during cross-compilation
+# This is critical for mobile cross-compilation to avoid linking against host libs
 cibw_environment:
   PKG_CONFIG: ""
 
 # Build script to set up cross-compilation
-# For mobile platforms, we need to configure meson properly without patches
+# For mobile platforms, we create a builddir as conda-forge does
 cibw_before_all: |
-  # Create a simple cross-compilation setup script
+  # Create build directory following conda-forge pattern
+  mkdir -p builddir
+  echo "Setting up numpy build for $CIBW_PLATFORM..."
+  
+  # For mobile platforms, log the configuration
   if [ "$CIBW_PLATFORM" = "android" ] || [ "$CIBW_PLATFORM" = "ios" ]; then
-    echo "Setting up mobile platform build for $CIBW_PLATFORM..."
+    echo "Building for mobile platform: $CIBW_PLATFORM with architecture: $CIBW_ARCHS"
+    echo "Using no-BLAS mode for simplified mobile builds"
   fi
 
 # CIBW config settings to pass to meson-python
-# These settings configure numpy build for mobile platforms:
+# Based on void-linux and conda-forge build configurations:
+# - builddir=builddir: Use separate build directory (conda-forge pattern)
 # - allow-noblas=true: Build without BLAS/LAPACK for simpler mobile builds
-# - disable-svml=true: Disable Intel SVML for ARM portability
-cibw_config_settings: setup-args=-Dallow-noblas=true setup-args=-Ddisable-svml=true
+# - disable-svml=true: Disable Intel SVML for ARM portability (void-linux pattern)
+# 
+# Note: Tests are skipped by default in cibuildwheel (no CIBW_TEST_COMMAND set)
+# This matches the "disable sanity checks" requirement for mobile builds
+cibw_config_settings: builddir=builddir setup-args=-Dallow-noblas=true setup-args=-Ddisable-svml=true
