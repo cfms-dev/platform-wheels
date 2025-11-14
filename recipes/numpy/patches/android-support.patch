@@ -1,0 +1,54 @@
+diff -ru numpy-orig/vendored-meson/meson-python/mesonpy/__init__.py numpy/vendored-meson/meson-python/mesonpy/__init__.py
+--- numpy-orig/vendored-meson/meson-python/mesonpy/__init__.py
++++ numpy/vendored-meson/meson-python/mesonpy/__init__.py
+@@ -689,6 +689,50 @@
+                     ''')
+                     self._meson_cross_file.write_text(cross_file_data)
+                     self._meson_args['setup'].extend(('--cross-file', os.fspath(self._meson_cross_file)))
++        elif sysconfig_platform.startswith("android-"):
++            # Parse Android platform string: android-{api_level}-{arch}
++            parts = sysconfig_platform.split("-")
++            if len(parts) >= 3:
++                arch = parts[2]
++                # Map architecture names
++                if arch in ("aarch64", "arm64_v8a"):
++                    cpu = "aarch64"
++                    cpu_family = "aarch64"
++                elif arch in ("arm", "armeabi_v7a", "armv7a"):
++                    cpu = "armv7"
++                    cpu_family = "arm"
++                elif arch == "x86_64":
++                    cpu = "x86_64"
++                    cpu_family = "x86_64"
++                elif arch in ("x86", "i686"):
++                    cpu = "i686"
++                    cpu_family = "x86"
++                else:
++                    # Fallback to using arch as-is
++                    cpu = arch
++                    cpu_family = arch
++                
++                cross_file_data = textwrap.dedent(
++                    f"""
++                    [binaries]
++                    c = [{sysconfig.get_config_var("CC")!r}]
++                    cpp = [{sysconfig.get_config_var("CXX")!r}]
++
++                    [host_machine]
++                    system = 'android'
++                    cpu = {cpu!r}
++                    cpu_family = {cpu_family!r}
++                    endian = 'little'
++
++                    [properties]
++                    longdouble_format = 'IEEE_DOUBLE_LE'
++                """
++                )
++                self._meson_cross_file.write_text(cross_file_data)
++                self._meson_args["setup"].extend(
++                    ("--cross-file", os.fspath(self._meson_cross_file),
++                     "-Dallow-noblas=true")
++                )
+         elif sysconfig_platform.startswith("ios-"):
+             arch = sysconfig_platform.split("-")[-2]
+             family = "aarch64" if arch == "arm64" else arch

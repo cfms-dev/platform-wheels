@@ -1,2 +1,25 @@
 package:
   name: numpy
+  # version: ""  # Optional: leave empty to use latest
+
+# Pip dependencies needed for building numpy
+# Cython is required for building numpy's extension modules
+# meson-python is the build backend (numpy uses meson build system)
+pip_dependencies:
+  - Cython
+  - meson-python
+
+# Environment variables for the build
+# PKG_CONFIG="" prevents finding host system libraries during cross-compilation
+cibw_environment:
+  PKG_CONFIG: ""
+
+# CIBW config settings to pass to meson-python
+# These settings are applied universally but the patches handle platform-specific cross-compilation:
+# - Disable SVML (Intel's Short Vector Math Library) for portability to ARM and other non-x86 platforms
+# Note: -Dallow-noblas=true is added by the patches for mobile platforms (Android/iOS)
+cibw_config_settings: setup-args=-Ddisable-svml=true
+  
+patches:
+  - patches/mobile-1.26.0.patch  # Adds iOS/tvOS/watchOS support to meson build system
+  - patches/android-support.patch  # Adds Android support to meson build system
