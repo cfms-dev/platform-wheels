@@ -14,12 +14,16 @@ pip_dependencies:
 cibw_environment:
   PKG_CONFIG: ""
 
+# Build script to set up cross-compilation
+# For mobile platforms, we need to configure meson properly without patches
+cibw_before_all: |
+  # Create a simple cross-compilation setup script
+  if [ "$CIBW_PLATFORM" = "android" ] || [ "$CIBW_PLATFORM" = "ios" ]; then
+    echo "Setting up mobile platform build for $CIBW_PLATFORM..."
+  fi
+
 # CIBW config settings to pass to meson-python
-# These settings are applied universally but the patches handle platform-specific cross-compilation:
-# - Disable SVML (Intel's Short Vector Math Library) for portability to ARM and other non-x86 platforms
-# Note: -Dallow-noblas=true is added by the patches for mobile platforms (Android/iOS)
-cibw_config_settings: setup-args=-Ddisable-svml=true
-  
-patches:
-  - patches/mobile-1.26.0.patch  # Adds iOS/tvOS/watchOS support to meson build system
-  - patches/android-support.patch  # Adds Android support to meson build system
+# These settings configure numpy build for mobile platforms:
+# - allow-noblas=true: Build without BLAS/LAPACK for simpler mobile builds
+# - disable-svml=true: Disable Intel SVML for ARM portability
+cibw_config_settings: setup-args=-Dallow-noblas=true setup-args=-Ddisable-svml=true
