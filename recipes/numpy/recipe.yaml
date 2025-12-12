@@ -14,6 +14,7 @@ pip_dependencies:
 
 host_dependencies:
   - python3-dev
+  - cmake
 
 # Environment variables for the build
 # PKG_CONFIG="" prevents finding host system libraries during cross-compilation
