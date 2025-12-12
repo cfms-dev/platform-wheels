@@ -1,2 +1,101 @@
 package:
   name: numpy
+  # version: ""  # Optional: leave empty to use latest
+
+# Pip dependencies needed for building numpy
+# Based on void-linux and conda-forge configurations:
+# - Cython: Required for building numpy's extension modules
+# - meson-python: Build backend (numpy uses meson build system since 1.26+)
+# - build: PEP 517 build frontend (conda-forge uses python -m build)
+pip_dependencies:
+  - Cython
+  - meson-python
+  - build
+
+host_dependencies:
+  - python3-dev
+  - cmake
+
+# Environment variables for the build
+# PKG_CONFIG="" prevents finding host system libraries during cross-compilation
+# This is critical for mobile cross-compilation to avoid linking against host libs
+cibw_environment:
+    LDFLAGS: "-lm"
+#   PKG_CONFIG: ""
+
+# Build script to set up cross-compilation
+# For mobile platforms, we create a builddir and meson cross file
+cibw_before_all: |
+  # Create build directory following conda-forge pattern
+  mkdir -p builddir
+  echo "Setting up numpy build for $CIBW_PLATFORM..."
+  
+  # Create meson cross file for mobile platforms
+  if [ "$CIBW_PLATFORM" = "android" ] || [ "$CIBW_PLATFORM" = "ios" ]; then
+    echo "Building for mobile platform: $CIBW_PLATFORM with architecture: $CIBW_ARCHS"
+    echo "Using no-BLAS mode for simplified mobile builds"
+    
+    # Determine CPU architecture for meson cross file
+    case "$CIBW_ARCHS" in
+      arm64*|aarch64)
+        CPU="aarch64"
+        CPU_FAMILY="aarch64"
+        ;;
+      x86_64)
+        CPU="x86_64"
+        CPU_FAMILY="x86_64"
+        ;;
+      armv7*|arm)
+        CPU="armv7"
+        CPU_FAMILY="arm"
+        ;;
+      x86|i686)
+        CPU="i686"
+        CPU_FAMILY="x86"
+        ;;
+      *)
+        CPU="$CIBW_ARCHS"
+        CPU_FAMILY="$CIBW_ARCHS"
+        ;;
+    esac
+    
+    # Create meson cross file with sanity checks disabled
+    # Using /tmp for cross-platform compatibility
+    CROSS_FILE="/tmp/numpy_meson_cross.txt"
+    cat > "$CROSS_FILE" << 'CROSSEOF'
+  [binaries]
+  c = '${CC:-cc}'
+  cpp = '${CXX:-c++}'
+  
+  [host_machine]
+  system = '$CIBW_PLATFORM'
+  cpu_family = '$CPU_FAMILY'
+  cpu = '$CPU'
+  endian = 'little'
+  
+  [properties]
+  skip_sanity_check = true
+  longdouble_format = 'IEEE_DOUBLE_LE'
+  CROSSEOF
+    
+    # Substitute variables in the cross file
+    sed -i "s/\${CC:-cc}/${CC:-cc}/g" "$CROSS_FILE"
+    sed -i "s/\${CXX:-c++}/${CXX:-c++}/g" "$CROSS_FILE"
+    sed -i "s/\$CIBW_PLATFORM/$CIBW_PLATFORM/g" "$CROSS_FILE"
+    sed -i "s/\$CPU_FAMILY/$CPU_FAMILY/g" "$CROSS_FILE"
+    sed -i "s/\$CPU/$CPU/g" "$CROSS_FILE"
+    
+    echo "Created meson cross file at $CROSS_FILE:"
+    cat "$CROSS_FILE"
+  fi
+
+# CIBW config settings to pass to meson-python
+# Based on void-linux and conda-forge build configurations:
+# - builddir=builddir: Use separate build directory (conda-forge pattern)
+# - allow-noblas=true: Build without BLAS/LAPACK for simpler mobile builds
+# - disable-svml=true: Disable Intel SVML for ARM portability (void-linux pattern)
+# - Cross file at /tmp/numpy_meson_cross.txt with skip_sanity_check=true for mobile builds
+# 
+# Note: Tests are skipped by default in cibuildwheel (no CIBW_TEST_COMMAND set)
+# This matches the "disable sanity checks" requirement for mobile builds
+cibw_config_settings: builddir=builddir setup-args=--cross-file=/tmp/numpy_meson_cross.txt setup-args=-Dallow-noblas=true setup-args=-Ddisable-svml=true
