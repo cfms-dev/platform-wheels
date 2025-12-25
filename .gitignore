@@ -31,3 +31,5 @@ Thumbs.db
 
 # Downloaded tools
 actionlint
+
+uv.lock
