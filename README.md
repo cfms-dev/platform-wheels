@@ -9,6 +9,7 @@ This repository provides an automated system for building Python wheels for mult
 - Android builds for **arm64_v8a** and **x86_64** architectures (as specified)
 - **Recipe-based configuration** - Organize packages with patches in `recipes/` directory
 - Easy package configuration via `packages.txt`, `packages.yaml`, or `recipes/`
+- **Pre-built wheels support** - Include pre-compiled wheels from `prebuilt-wheels/` directory
 - **Host dependency management** - Install system libraries needed by packages (e.g., libffi for cffi)
 - **Custom source support** - Build from custom URLs or Git repositories
 - **Patch support** - Apply patches to source code before building (local files or URLs)
@@ -208,6 +209,42 @@ When specifying `host_dependencies`, you need to ensure these libraries are comp
 3. `packages.txt` (simple list, backward compatibility)
 
 See `packages.yaml.example` and `recipes/README.md` for more examples.
+
+### Using Pre-Built Wheels
+
+If you have pre-compiled wheels that you want to include in the index without building them through the CI/CD pipeline:
+
+1. **Place wheels in the `prebuilt-wheels/` directory**:
+   ```
+   prebuilt-wheels/
+   ├── my_package-1.0.0-cp314-cp314-android_21_arm64_v8a.whl
+   ├── another_package-2.1.0-cp314-cp314-ios_arm64.whl
+   └── README.md
+   ```
+
+2. **Commit and push** the wheels to the repository:
+   ```bash
+   git add prebuilt-wheels/
+   git commit -m "Add pre-built wheels"
+   git push
+   ```
+
+3. **Wheels are automatically included**: During deployment, the workflow will:
+   - Search for `.whl` files in `prebuilt-wheels/`
+   - Include them alongside CI-built wheels
+   - Generate index entries for them
+
+**Requirements for pre-built wheels:**
+- Must be valid Python wheel files (`.whl` extension)
+- Should be compatible with Python 3.14 (cp314)
+- Must follow standard wheel naming convention
+- Supported platforms: Android (arm64_v8a, x86_64) and iOS
+
+**Use cases:**
+- Including wheels that are difficult to build in CI
+- Providing wheels built on specialized hardware
+- Distributing proprietary packages
+- Quick prototyping without setting up full CI builds
 
 ### Triggering Builds
 
