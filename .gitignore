@@ -1,8 +1,6 @@
 # Build artifacts
 wheelhouse/
 *.whl
-# But allow wheel files in prebuilt-wheels directory
-!prebuilt-wheels/*.whl
 build/
 dist/
 *.egg-info/

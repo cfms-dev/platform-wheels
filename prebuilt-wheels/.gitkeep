@@ -1,2 +1,0 @@
-# This file ensures the prebuilt-wheels directory is tracked by git
-# even when empty. You can delete it once you add wheel files.
