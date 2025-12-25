@@ -794,6 +794,19 @@ jobs:
           find artifacts -name "*.whl" -exec cp {} wheels/ \;
           ls -lh wheels/
       
+      - name: Include pre-built wheels
+        run: |
+          if [ -d "prebuilt-wheels" ] && ls prebuilt-wheels/*.whl 1> /dev/null 2>&1; then
+            echo "Found pre-built wheels, copying to wheels directory..."
+            cp prebuilt-wheels/*.whl wheels/
+            echo "Pre-built wheels included:"
+            ls -lh prebuilt-wheels/*.whl
+          else
+            echo "No pre-built wheels found in prebuilt-wheels/ directory"
+          fi
+          echo "Total wheels to be indexed:"
+          ls -lh wheels/
+      
       - name: Generate PyPI index
         env:
           PACKAGES_JSON: ${{ needs.read_packages.outputs.packages }}
