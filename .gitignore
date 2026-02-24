@@ -1,6 +1,4 @@
 # Build artifacts
-wheelhouse/
-*.whl
 build/
 dist/
 *.egg-info/
