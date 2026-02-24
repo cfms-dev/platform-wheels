@@ -794,6 +794,16 @@ jobs:
           find artifacts -name "*.whl" -exec cp {} wheels/ \;
           ls -lh wheels/
       
+      - name: Include pre-built wheels from wheelhouse
+        run: |
+          if [ -d wheelhouse ] && [ -n "$(find wheelhouse -maxdepth 1 -name '*.whl' -print -quit)" ]; then
+            echo "Found pre-built wheels in wheelhouse/:"
+            find wheelhouse -maxdepth 1 -name '*.whl' -exec ls -lh {} \;
+            find wheelhouse -maxdepth 1 -name '*.whl' -exec cp {} wheels/ \;
+          else
+            echo "No pre-built wheels found in wheelhouse/"
+          fi
+      
       - name: Generate PyPI index
         env:
           PACKAGES_JSON: ${{ needs.read_packages.outputs.packages }}
