@@ -10,6 +10,7 @@ echo "Setting up cross-compilation environment for host dependencies..."
 find_library_install() {
     local lib_name=$1
     local search_patterns=(
+        "/opt/android-deps/*"
         "/tmp/${lib_name}-install-*"
         "/tmp/${lib_name}-*"
         "$HOME/.local/${lib_name}"

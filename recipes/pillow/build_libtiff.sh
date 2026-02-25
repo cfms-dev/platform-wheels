@@ -98,7 +98,7 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     export LDFLAGS="--sysroot=$SYSROOT"
     
     # Configure and build libtiff
-    INSTALL_DIR="/tmp/libtiff-install-${ANDROID_ABI}"
+    INSTALL_DIR="/opt/android-deps/${ANDROID_ABI}"
     mkdir -p "$INSTALL_DIR"
     
     # Clean previous build
