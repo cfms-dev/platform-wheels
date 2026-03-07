@@ -180,7 +180,7 @@ jobs:
             for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
           fi
           # Find the extracted directory (exclude common repo directories and scripts)
-          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "wheelhouse" -not -name "." | head -n 1)
           
           # Validate that PACKAGE_DIR is set and exists
           if [ -z "$PACKAGE_DIR" ]; then
@@ -406,7 +406,7 @@ jobs:
             for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
           fi
           # Find the extracted directory (exclude common repo directories and scripts)
-          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "wheelhouse" -not -name "." | head -n 1)
           
           # Validate that PACKAGE_DIR is set and exists
           if [ -z "$PACKAGE_DIR" ]; then
@@ -653,7 +653,7 @@ jobs:
             for file in *.tar; do [ -f "$file" ] && tar -xf "$file" && rm "$file"; done
           fi
           # Find the extracted directory (exclude common repo directories and scripts)
-          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "." | head -n 1)
+          PACKAGE_DIR=$(find . -maxdepth 1 -type d -not -name ".*" -not -name "__pycache__" -not -name ".github" -not -name "recipes" -not -name "scripts" -not -name "wheelhouse" -not -name "." | head -n 1)
           
           # Validate that PACKAGE_DIR is set and exists
           if [ -z "$PACKAGE_DIR" ]; then
