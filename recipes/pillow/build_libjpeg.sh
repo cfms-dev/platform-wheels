@@ -101,7 +101,8 @@ if [ "$CIBW_PLATFORM" = "android" ]; then
     export LDFLAGS="--sysroot=$SYSROOT"
     
     # Configure and build libjpeg-turbo using CMake
-    INSTALL_DIR="/tmp/libjpeg-install-${ANDROID_ABI}"
+    INSTALL_DIR="/opt/android-deps/${ANDROID_ABI}"
+    mkdir -p "$INSTALL_DIR"
     BUILD_DIR="build-${ANDROID_ABI}"
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
